@@ -1,0 +1,1006 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Polla Mundial 2026 - Parley.com.ve</title>
+  <!-- Updated: 2026-06-13 for timezone coordination -->
+  <!-- Styling -->
+  <link rel="stylesheet" href="./style.css">
+  
+  <!-- Favicon -->
+  <link rel="shortcut icon" href="./Icono Oficial de la App.png" type="image/png">
+  
+  <!-- PWA Manifest -->
+  <link rel="manifest" href="./manifest.json">
+  <meta name="theme-color" content="#0E1626">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+</head>
+<body>
+  <!-- DIAGNOSTICS OVERLAY -->
+  <div id="diagnostics-overlay" style="display:none; position:fixed; bottom:0; left:0; right:0; max-height:220px; overflow-y:auto; background:rgba(220,53,69,0.95); color:white; font-family:monospace; padding:15px; z-index:999999; font-size:12px; border-top:3px solid #700; box-shadow:0 -5px 15px rgba(0,0,0,0.5); line-height:1.4;">
+    <div style="font-weight:bold; border-bottom:1px solid rgba(255,255,255,0.4); padding-bottom:5px; margin-bottom:8px; display:flex; justify-content:space-between; align-items:center;">
+      <span>🚨 DETECTADO ERROR EN LA PÁGINA (DIAGNÓSTICO):</span>
+      <button onclick="this.parentElement.parentElement.style.display='none'" style="background:white; color:#dc3545; border:none; padding:2px 8px; font-weight:bold; cursor:pointer; border-radius:3px;">Cerrar</button>
+    </div>
+    <pre id="diagnostics-log" style="margin:0; white-space:pre-wrap; word-break:break-all; font-family:monospace;"></pre>
+  </div>
+  <script>
+    (function() {
+      function logError(msg, url, line, col, err) {
+        var overlay = document.getElementById('diagnostics-overlay');
+        var log = document.getElementById('diagnostics-log');
+        if (overlay && log) {
+          overlay.style.display = 'block';
+          var filename = url ? url.split('/').pop() : 'script';
+          log.appendChild(document.createTextNode(
+            "Mensaje: " + msg + "\n" +
+            "Archivo: " + filename + " (Línea: " + line + ", Columna: " + col + ")\n" +
+            (err && err.stack ? "Detalles:\n" + err.stack : "") + "\n----------------------------------------\n"
+          ));
+        }
+      }
+      window.onerror = function(msg, url, line, col, err) {
+        logError(msg, url, line, col, err);
+        return false;
+      };
+      window.addEventListener('unhandledrejection', function(event) {
+        var reason = event.reason;
+        var msg = reason ? (reason.message || reason) : "Promesa rechazada sin motivo";
+        var stack = reason ? reason.stack : "";
+        logError(msg, null, 0, 0, { stack: stack });
+      });
+    })();
+  </script>
+
+  <!-- Toast Notification Container -->
+  <div id="toast-container" class="toast"></div>
+
+  <!-- Header Section (Desktop Top Navigation & Mobile Profile Summary) -->
+  <header class="app-header">
+    <div class="brand">
+      <img src="./Icono Oficial de la App.png" alt="Icono Oficial" class="header-logo-img">
+      <img src="./TITULO.png" alt="Parley Polla" class="header-title-img">
+    </div>
+    
+    <!-- User Profile Header Component (Toggled dynamically) -->
+    <div class="user-profile-header" id="header-user-profile" style="display: none;">
+      <div class="user-points-badge">
+        <span>⭐</span> <span id="header-points-value">0</span> PTS
+      </div>
+      <div class="user-avatar" id="user-avatar-initials" onclick="openTicketModal()" title="Mi Ticket">P</div>
+      <button class="btn-logout-header" onclick="handleLogout()">Salir</button>
+    </div>
+  </header>
+
+  <!-- Main SPA Viewport -->
+  <main>
+    
+    <!-- SECTION 1: INICIO / DASHBOARD (PORTADA DEPORTIVA O DASHBOARD RESUMEN) -->
+    <section id="inicio" class="app-section active">
+      
+      <!-- LOGGED OUT: Portada Deportiva (Hero View) -->
+      <div class="hero-wrapper" id="logged-out-hero">
+        <img src="./LOGO MASTER.png" alt="Logo Master Parley" class="hero-logo-master">
+        <p class="hero-subtitle">¡Juega seguro, fácil y rápido con el Parley de Venezuela! Arma tu Polla Mundialista, activa tus comodines y demuestra que <strong>eres el verdadero campeón</strong>.</p>
+        <button class="btn-hero-cta" onclick="openAuthModal('register')"><strong>REGÍSTRATE Y JUEGA YA</strong></button>
+        <!-- PWA Install Button for Android/Chrome -->
+        <div id="pwa-install-btn-hero" class="pwa-install-card" style="display:none; margin-top:18px;" onclick="document.getElementById('pwa-install-btn-hero').dispatchEvent(new CustomEvent('pwa-click'))">
+          <div class="pwa-install-shimmer"></div>
+          <div class="pwa-install-inner">
+            <div class="pwa-install-icon-wrap">
+              <svg class="pwa-dl-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v13"/><path d="m7 11 5 5 5-5"/><rect x="3" y="18" width="18" height="3" rx="1.5"/></svg>
+            </div>
+            <div class="pwa-install-text">
+              <span class="pwa-install-title">Instalar Polla Mundialista</span>
+              <span class="pwa-install-sub">Gratis · Acceso directo desde tu pantalla</span>
+            </div>
+            <div class="pwa-install-arrow">›</div>
+          </div>
+        </div>
+        <!-- PWA Install Instructions for iOS/Safari -->
+        <div id="pwa-ios-instructions-hero" style="display: none; margin-top: 14px; background: rgba(255, 255, 255, 0.05); padding: 10px; border-radius: var(--radius-sm); border: 1px solid var(--border-sutil); font-size: 12px; color: var(--text-secondary); text-align: center; max-width: 320px; margin-left: auto; margin-right: auto; line-height: 1.4;">
+          💡 <strong>Instalar en iPhone:</strong> presiona compartir <span style="font-size: 14px;">📤</span> y selecciona <strong>"Agregar a Inicio"</strong>.
+        </div>
+        <div style="margin-top: 20px; font-size: 13px; color: var(--text-secondary);">
+          ¿Ya tienes cuenta? <a href="#" onclick="openAuthModal('login')" style="color: var(--accent); font-weight:700; text-decoration:none;">Inicia Sesión</a>
+        </div>
+      </div>
+      
+      <!-- LOGGED IN: Dashboard del Usuario -->
+      <div id="logged-in-dashboard" style="display: none;">
+        <div class="dashboard-grid">
+          
+          <!-- Left Column (User stats and achievements) -->
+          <div>
+            <div class="glass-card" style="background: linear-gradient(135deg, rgba(27,42,71,0.6) 0%, rgba(14,22,38,0.6) 100%);">
+              <span class="promo-badge" style="background:var(--accent); color:#000000; margin-bottom:12px; display:inline-block; border: 1px solid #FFFFFF;">PANEL GENERAL</span>
+              <div style="display: flex; justify-content: space-between; align-items: center; gap: 16px;">
+                <div style="flex: 1; min-width: 0;">
+                  <h2 class="welcome-title">BIENVENIDO, <span id="dash-user-name" style="color:var(--accent);">Usuario</span>!</h2>
+                  <p style="color:var(--text-secondary); font-size:14px; margin-bottom:20px;">🏆 ¡Conquista el Mundial! Arma tus marcadores de la fase de grupos, suma puntos en cada jornada y sube directo al podio de campeones. ¡Juega y gana hoy! ⚽</p>
+                </div>
+                <img src="./MASCOTA.png" alt="Mascota Parley" class="dashboard-mascot-img">
+              </div>
+              
+              <!-- Core stats summary -->
+              <div class="dash-stats-grid">
+                <div class="dash-stat-card">
+                  <div class="dash-stat-label">Mi Puntaje</div>
+                  <div class="dash-stat-value accented" id="dash-user-points">0 PTS</div>
+                </div>
+                <div class="dash-stat-card">
+                  <div class="dash-stat-label">Marcadores Exactos</div>
+                  <div class="dash-stat-value" id="stat-exacts">0</div>
+                </div>
+                <div class="dash-stat-card">
+                  <div class="dash-stat-label">Aciertos 1X2</div>
+                  <div class="dash-stat-value" id="stat-1x2">0</div>
+                </div>
+              </div>
+              
+              <!-- PWA Install Button for Android/Chrome inside Panel General -->
+              <div id="pwa-install-btn" class="pwa-install-card pwa-install-card--compact" style="display:none; margin-top:16px;">
+                <div class="pwa-install-shimmer"></div>
+                <div class="pwa-install-inner">
+                  <div class="pwa-install-icon-wrap">
+                    <svg class="pwa-dl-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v13"/><path d="m7 11 5 5 5-5"/><rect x="3" y="18" width="18" height="3" rx="1.5"/></svg>
+                  </div>
+                  <div class="pwa-install-text">
+                    <span class="pwa-install-title">Instalar App</span>
+                    <span class="pwa-install-sub">Acceso rápido · Sin tienda</span>
+                  </div>
+                  <div class="pwa-install-arrow">›</div>
+                </div>
+              </div>
+              <!-- PWA Install Instructions for iOS/Safari inside Panel General -->
+              <div id="pwa-ios-instructions" style="display: none; margin-top: 14px; background: rgba(255, 255, 255, 0.03); padding: 10px; border-radius: var(--radius-sm); border: 1px solid var(--border-sutil); font-size: 12px; color: var(--text-secondary); text-align: center; line-height: 1.4;">
+                💡 <strong>Instalar en iPhone:</strong> presiona compartir <span style="font-size: 14px;">📤</span> y selecciona <strong>"Agregar a Inicio"</strong>.
+              </div>
+            </div>
+            
+            <!-- Streak Tracker Widget -->
+            <div id="dash-streak-container" class="dash-streak-widget">
+              <div class="streak-side streak-left">
+                <span class="streak-icon">🔥</span>
+                <div class="streak-info">
+                  <div class="streak-label">RACHA ACTUAL CON ACIERTOS</div>
+                  <div class="streak-val" id="dash-current-streak">0 PARTIDOS</div>
+                </div>
+              </div>
+              <div class="streak-side streak-right">
+                <div class="streak-label">MÁXIMA RACHA</div>
+                <div class="streak-val highlight" id="dash-max-streak">0 🔥</div>
+              </div>
+            </div>
+            
+            <!-- Achievements / Badges Section -->
+            <div class="glass-card">
+              <h3 style="font-size:18px; margin-bottom:8px; display:flex; justify-content:space-between; align-items:center;">INSIGNIAS DEPORTIVAS
+                <span style="font-size:11px; color:var(--accent); background:rgba(255,223,0,0.1); padding:4px 8px; border-radius:10px; border: 1px solid #FFFFFF;">Gamificación</span>
+              </h3>
+              <p style="font-size:13px; color:var(--text-secondary);">Completa retos pronosticando el Mundial y desbloquea insignias estéticas de prestigio.</p>
+              <div class="badges-container" id="dash-badges-container">
+                <!-- Loaded dynamically in app.js -->
+              </div>
+            </div>
+          </div>
+          
+          <!-- Right Column (Commercial advertisements and widgets) -->
+          <div>
+            <!-- Campaign 1: MUNDIAL DE GANADORES -->
+            <a href="https://parley.com.ve?ref=Quiniela2026&camp=mundial" target="_blank" class="promo-banner-link">
+              <img src="./MUNDIAL DE GANADORES.jpg" alt="Mundial de Ganadores">
+            </a>
+            
+            <!-- Campaign 2: BONO LUNES (replaces Parley VIP) -->
+            <a href="https://parley.com.ve?ref=Quiniela2026&camp=bonolunes" target="_blank" class="promo-banner-link" style="margin-bottom:20px;">
+              <img src="./BONO LUNES.jpg" alt="Bono Lunes">
+            </a>
+            
+            <!-- Redesigned Cómo Jugar Section -->
+            <div class="glass-card" style="padding: 20px;">
+              <h4 style="color: var(--accent); margin-bottom: 16px; font-size: 16px;">¿CÓMO JUGAR?</h4>
+              <div style="display: flex; flex-direction: column; gap: 12px;">
+                <!-- Step 1 -->
+                <div style="display: flex; gap: 12px; align-items: flex-start; background: rgba(255, 255, 255, 0.02); padding: 10px; border-radius: var(--radius-sm); border: 1px solid var(--border-sutil);">
+                  <div style="font-size: 20px; background: rgba(255, 223, 0, 0.1); border-radius: 50%; width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">⚽</div>
+                  <div>
+                    <h5 style="color: #FFFFFF; font-size: 12px; font-weight: 800; margin-bottom: 2px;">1. PREDICE GRUPOS</h5>
+                    <p style="color: var(--text-secondary); font-size: 12px; line-height: 1.5;">Ingresa tus marcadores para los partidos de la Fase de Grupos. Se cerrarán 10 minutos antes del pitazo inicial.</p>
+                  </div>
+                </div>
+                <!-- Step 2 -->
+                <div style="display: flex; gap: 12px; align-items: flex-start; background: rgba(255, 255, 255, 0.02); padding: 10px; border-radius: var(--radius-sm); border: 1px solid var(--border-sutil);">
+                  <div style="font-size: 20px; background: rgba(255, 223, 0, 0.1); border-radius: 50%; width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">🚨</div>
+                  <div>
+                    <h5 style="color: #FFFFFF; font-size: 12px; font-weight: 800; margin-bottom: 2px;">2. ACTIVA EL COMODÍN</h5>
+                    <p style="color: var(--text-secondary); font-size: 12px; line-height: 1.5;">Usa tus Comodines Parley (máximo 3 activos en total) para duplicar los puntos obtenidos en esos partidos.</p>
+                  </div>
+                </div>
+                <!-- Step 3 -->
+                <div style="display: flex; gap: 12px; align-items: flex-start; background: rgba(255, 255, 255, 0.02); padding: 10px; border-radius: var(--radius-sm); border: 1px solid var(--border-sutil);">
+                  <div style="font-size: 20px; background: rgba(255, 223, 0, 0.1); border-radius: 50%; width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">🏆</div>
+                  <div>
+                    <h5 style="color: #FFFFFF; font-size: 12px; font-weight: 800; margin-bottom: 2px;">3. DESBLOQUEA LOGROS</h5>
+                    <p style="color: var(--text-secondary); font-size: 12px; line-height: 1.5;">Desbloquea insignias por tus aciertos y gana puntos extra por niveles (Activo: +5, Frecuente: +10, Clínico: +15, Oráculo: +15, HAT-TRICK VIP: +20).</p>
+                  </div>
+                </div>
+              </div>
+              <button class="btn-league-action" style="margin-top: 14px; padding: 10px; font-size: 12px; width: 100%; border: 1.5px solid #FFFFFF;" onclick="openTutorialModal()">VER TUTORIAL COMPLETO</button>
+              <button class="btn-sim-action" style="margin-top: 10px; padding: 10px; font-size: 12px; width: 100%; border-color: var(--accent); color: var(--accent); display: flex; align-items: center; justify-content: center; gap: 8px;" onclick="shareApp()">
+                <span>🔗</span> COMPARTIR QUINIELA
+              </button>
+
+            </div>
+          </div>
+          
+        </div>
+      </div>
+    </section>
+
+    <!-- SECTION 2: PRONÓSTICOS (PREDICCIONES DE PARTIDOS Y ESPECIALES) -->
+    <section id="pronosticos" class="app-section">
+      <div class="glass-card">
+        <h2 style="font-size:22px; margin-bottom:6px;">MIS PRONÓSTICOS</h2>
+        <p style="color:var(--text-secondary); font-size:13px; margin-bottom:12px;">Completa tus marcadores para la segunda vuelta de la Fase de Grupos.</p>
+        <div class="wildcard-hint-box">
+          <span class="wildcard-hint-icon">💡</span>
+          <p class="wildcard-hint-text">No olvides activar tu <strong>Comodín Parley</strong> para conseguir el doble de puntos.</p>
+        </div>
+        
+        <!-- Toggle sub-tabs -->
+        <div class="toggle-tabs-sub">
+          <button class="toggle-tab-sub-btn active" onclick="setMatchSubTab('group')">FASE DE GRUPOS</button>
+          <button class="toggle-tab-sub-btn" onclick="setMatchSubTab('specials')">ESPECIALES TORNEO</button>
+        </div>
+
+        <!-- Date Filter Selector -->
+        <div id="match-date-filter-container" style="margin-top: 15px; margin-bottom: 15px; display: flex; flex-direction: column; gap: 6px;">
+          <label for="match-date-filter" style="font-size: 11px; font-weight: 700; color: var(--text-secondary); text-transform: uppercase;">Filtrar partidos por fecha:</label>
+          <select id="match-date-filter" class="special-select-input" onchange="handleMatchDateFilterChange(this.value)" style="width: 100%; max-width: 100%; padding: 10px; border-radius: var(--radius-sm); font-size: 13px; background: #070c14; border: 1.5px solid var(--border-sutil); color: #FFF; outline: none; transition: var(--transition-smooth); cursor: pointer;">
+            <option value="all">📅 Mostrar todos los partidos</option>
+          </select>
+        </div>
+        
+        <!-- Matches Scroll Area -->
+        <div class="matches-list" id="matches-scroller">
+          <!-- Populated dynamically -->
+        </div>
+      </div>
+    </section>
+
+    <!-- SECTION 3: CLASIFICACIÓN (TABLA DE POSICIONES Y LIGAS PRIVADAS) -->
+    <section id="clasificacion" class="app-section">
+      <div class="glass-card">
+        <!-- Sub-tabs global vs private -->
+        <div class="leagues-tabs">
+          <button class="league-tab-btn active" onclick="setLeagueTab('global')">TABLA GENERAL</button>
+          <button class="league-tab-btn" onclick="setLeagueTab('private')">MIS LIGAS PRIVADAS</button>
+        </div>
+        
+        <!-- Tab content 1: Public League -->
+        <div id="public-league-panel">
+          <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px; margin-bottom:8px;">
+            <h2 style="font-size:20px; color:var(--accent);">COMPETICIÓN GLOBAL</h2>
+            <div class="top50-badge">🏆 TOP 50 NACIONAL</div>
+          </div>
+          <p style="color:var(--text-secondary); font-size:13px; margin-bottom:20px;">Se muestran únicamente las 50 mejores posiciones del país. Si estás fuera de este rango, verás tu posición destacada al final de la tabla. Haz clic en cualquier rival para ver el cara a cara.</p>
+          
+          <!-- Dynamic Podium visual structure for top 3 -->
+          <div class="podium-container">
+            <div class="podium-spot second" id="pod-spot-2">
+              <span style="font-size:20px; margin-bottom:4px;">🥈</span>
+              <div class="podium-avatar" id="pod-avatar-2">2</div>
+              <div class="podium-name" id="pod-name-2">-</div>
+              <div class="podium-pillar">
+                <span class="podium-points" id="pod-pts-2">0 pts</span>
+              </div>
+            </div>
+            
+            <div class="podium-spot first" id="pod-spot-1">
+              <span class="podium-crown">👑</span>
+              <span style="font-size:24px; margin-bottom:4px;">🥇</span>
+              <div class="podium-avatar" id="pod-avatar-1">1</div>
+              <div class="podium-name" id="pod-name-1">-</div>
+              <div class="podium-pillar">
+                <span class="podium-points" id="pod-pts-1">0 pts</span>
+              </div>
+            </div>
+            
+            <div class="podium-spot third" id="pod-spot-3">
+              <span style="font-size:20px; margin-bottom:4px;">🥉</span>
+              <div class="podium-avatar" id="pod-avatar-3">3</div>
+              <div class="podium-name" id="pod-name-3">-</div>
+              <div class="podium-pillar">
+                <span class="podium-points" id="pod-pts-3">0 pts</span>
+              </div>
+            </div>
+          </div>
+          
+          <!-- Leaderboard list table -->
+          <table class="leaderboard-table">
+            <thead>
+              <tr>
+                <th style="width:50px;">Pos</th>
+                <th>Jugador</th>
+                <th style="text-align:right;">Puntos</th>
+              </tr>
+            </thead>
+            <tbody id="global-leaderboard-body">
+              <!-- Loaded dynamically -->
+            </tbody>
+          </table>
+
+          <!-- Leaderboard Pagination Controls -->
+          <div class="leaderboard-pagination" style="display: flex; justify-content: space-between; align-items: center; margin-top: 15px; padding: 12px 0; border-top: 1px solid var(--border-sutil);">
+            <button id="prev-page-btn" class="btn-sim-action" onclick="handlePrevPage()" style="padding: 6px 12px; font-size: 13px; font-weight: bold; cursor: pointer;">◀ Anterior</button>
+            <span id="page-tracker" style="color: var(--text-secondary); font-size: 13px; font-weight: bold;">Página <span id="current-page-num" style="color: var(--accent);">1</span> de <span id="total-pages-num">1</span></span>
+            <button id="next-page-btn" class="btn-sim-action" onclick="handleNextPage()" style="padding: 6px 12px; font-size: 13px; font-weight: bold; cursor: pointer;">Siguiente ▶</button>
+          </div>
+          <div id="leaderboard-total-players" style="text-align: center; font-size: 11px; color: var(--text-muted); margin-top: 5px;">Total de participantes: <span id="total-players-count">0</span></div>
+        </div>
+        
+        <!-- Tab content 2: Private leagues panel -->
+        <div id="private-league-panel" style="display: none;">
+          <h2 style="font-size:20px; color:var(--accent); margin-bottom:4px;">MIS LIGAS PRIVADAS</h2>
+          <p style="color:var(--text-secondary); font-size:13px; margin-bottom:16px;">Crea grupos exclusivos para competir cara a cara con tus amigos o familiares utilizando un código de invitación.</p>
+          
+          <div class="league-controls">
+            <!-- Create Form Group -->
+            <div class="glass-card" style="flex:1; margin-bottom:0; padding:16px;">
+              <h4 style="margin-bottom:10px;">CREAR UN GRUPO</h4>
+              <div class="form-group" style="margin-bottom:10px;">
+                <input type="text" class="form-input" placeholder="Nombre de tu liga (ej. Los Panas)" id="create-league-name" style="padding:10px;">
+              </div>
+              <button class="btn-auth-submit" onclick="createLeague(document.getElementById('create-league-name').value)" style="padding:10px; font-size:13px; margin-top:0; border: 1px solid #FFFFFF;">CREAR GRUPO</button>
+            </div>
+            
+            <!-- Join Form Group -->
+            <div class="glass-card" style="flex:1; margin-bottom:0; padding:16px;">
+              <h4 style="margin-bottom:10px;">UNIRSE A UN GRUPO</h4>
+              <div class="form-group" style="margin-bottom:10px;">
+                <input type="text" class="form-input" placeholder="Código de 5 dígitos (ej. AB12C)" id="join-league-code" maxlength="5" style="padding:10px; text-transform:uppercase;">
+              </div>
+              <button class="btn-auth-submit" onclick="joinLeague(document.getElementById('join-league-code').value)" style="padding:10px; font-size:13px; margin-top:0; border: 1px solid #FFFFFF;">UNIRSE</button>
+            </div>
+          </div>
+          
+          <!-- User joined private groups list -->
+          <div id="private-leagues-list" style="margin-top:20px;">
+            <!-- Loaded dynamically -->
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SECTION 4: GRUPOS OFICIALES Y TABLA DE POSICIONES -->
+    <section id="grupos" class="app-section">
+      <div class="glass-card">
+        <h2 style="font-size:22px; margin-bottom:6px;">GRUPOS OFICIALES FIFA 2026</h2>
+        <p style="color:var(--text-secondary); font-size:13px; margin-bottom:20px;">Posiciones en tiempo real de los 48 equipos clasificados divididos en 12 grupos de 4 integrantes.</p>
+        
+        <div class="groups-container-grid" id="groups-grid-container">
+          <!-- Loaded dynamically -->
+        </div>
+      </div>
+    </section>
+
+    <!-- SECTION 5: PANEL DE ADMINISTRADOR Y SIMULADOR -->
+    <section id="admin" class="app-section">
+      <!-- A. Password Auth Gate panel -->
+      <div class="glass-card" id="admin-auth-panel">
+        <h2 style="font-size:22px; margin-bottom:6px; color:var(--accent);">ACCESO ADMINISTRADOR</h2>
+        <p style="color:var(--text-secondary); font-size:13px; margin-bottom:20px;">Rol exclusivo para actualizar marcadores del Mundial y simular pronósticos.</p>
+        
+        <div class="form-group">
+          <label class="form-label">CONTRASEÑA</label>
+          <input type="password" class="form-input" placeholder="INGRESA CONTRASEÑA DE ADMIN" id="admin-password">
+        </div>
+        <button class="btn-auth-submit" onclick="handleAdminLogin(document.getElementById('admin-password').value)">INGRESAR</button>
+        <p style="font-size:12px; color:var(--text-muted); margin-top:10px; text-align:center;">DEMO ADMIN CREDENTIALS: CÉDULA: V-12345678, PASS: ADMIN123</p>
+      </div>
+      
+      <!-- B. Administrative Control Panel Dashboard -->
+      <div id="admin-dashboard-panel" style="display: none;">
+        <div class="admin-grid">
+          
+          <!-- Column 1: General Controls -->
+          <div>
+            <div class="glass-card">
+              <h3 style="color:var(--accent); margin-bottom:12px;">CONTROLES DEL TORNEO</h3>
+              
+              <!-- Tournament Finished & Export Controls -->
+              <div style="margin-top:20px; padding-top:14px; display:flex; flex-direction:column; gap:10px;">
+                <button class="btn-sim-action" id="admin-export-csv-btn" onclick="exportUserDataToCSV()" style="width:100%; border-color:#22C55E; color:#22C55E;">📥 EXPORTAR DATA A EXCEL (CSV)</button>
+                <button class="btn-sim-action" id="admin-sync-sheets-btn" onclick="syncUsersToGoogleSheets()" style="width:100%; border-color:#4285F4; color:#4285F4;">🔄 SINCRONIZAR CON GOOGLE SHEETS</button>
+                <button class="btn-sim-action" id="admin-toggle-finished-btn" onclick="toggleTournamentFinished()" style="width:100%; border-color:var(--accent); color:var(--accent);">🏆 DECLARAR FINAL DEL TORNEO</button>
+              </div>
+            </div>
+            
+            <!-- 5. User Management Card -->
+            <div class="glass-card">
+              <h3 style="color:var(--accent); margin-bottom:12px;">GESTIÓN DE USUARIOS</h3>
+              <p style="color:var(--text-secondary); font-size:13px; margin-bottom:12px;">Busca usuarios registrados para restablecer su clave a una por defecto (<code>123456</code>) o eliminar su cuenta de la quiniela.</p>
+              <div class="search-bar-container">
+                <input type="text" class="search-input" placeholder="BUSCAR USUARIO POR NOMBRE O CÉDULA..." id="admin-user-search-input" oninput="filterAdminUsers(this.value)">
+              </div>
+              <div style="max-height: 250px; overflow-y: auto;">
+                <table class="leaderboard-table" style="margin-top: 0;">
+                  <thead>
+                    <tr>
+                      <th>USUARIO</th>
+                      <th style="text-align:right;">ACCIONES</th>
+                    </tr>
+                  </thead>
+                  <tbody id="admin-users-list-tbody">
+                    <!-- Populated dynamically in app.js -->
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <!-- 6. Group Standing Override Card -->
+            <div class="glass-card">
+              <h3 style="color:var(--accent); margin-bottom:12px;">⚙️ AJUSTE MANUAL DE POSICIONES</h3>
+              <p style="color:var(--text-secondary); font-size:13px; margin-bottom:12px;">Ajusta el orden final de los equipos en un grupo en caso de situaciones extradeportivas que alteren las posiciones oficiales.</p>
+              
+              <div class="form-group" style="margin-bottom: 12px;">
+                <label class="form-label">SELECCIONAR GRUPO</label>
+                <select id="admin-override-group-select" class="form-input" onchange="adminLoadOverrideGroupTeams(this.value)">
+                  <option value="">-- SELECCIONE GRUPO --</option>
+                  <option value="A">GRUPO A</option>
+                  <option value="B">GRUPO B</option>
+                  <option value="C">GRUPO C</option>
+                  <option value="D">GRUPO D</option>
+                  <option value="E">GRUPO E</option>
+                  <option value="F">GRUPO F</option>
+                  <option value="G">GRUPO G</option>
+                  <option value="H">GRUPO H</option>
+                  <option value="I">GRUPO I</option>
+                  <option value="J">GRUPO J</option>
+                  <option value="K">GRUPO K</option>
+                  <option value="L">GRUPO L</option>
+                </select>
+              </div>
+              
+              <div id="admin-override-teams-container" style="display:none; flex-direction:column; gap:8px; margin-bottom:12px; background:rgba(0,0,0,0.2); padding:10px; border-radius:6px; border:1px solid var(--border-sutil);">
+                <!-- Loaded dynamically -->
+              </div>
+              
+              <div style="display:flex; gap:10px;">
+                <button id="btn-admin-save-override" class="btn-admin-action" style="display:none; border-color:var(--accent); color:var(--accent); width:100%; margin-top:0;" onclick="adminSaveGroupOverride()">💾 APLICAR AJUSTE</button>
+                <button id="btn-admin-clear-override" class="btn-admin-action" style="display:none; border-color:var(--alert); color:var(--alert); width:100%; margin-top:0;" onclick="adminClearGroupOverride()">✕ LIMPIAR AJUSTE</button>
+              </div>
+            </div>
+
+          </div>
+          
+          <!-- Column 2: Live match updater -->
+          <div class="glass-card">
+            <h3 style="color:var(--accent); margin-bottom:12px;">ACTUALIZADOR DE MARCADORES REALES</h3>
+            <p style="color:var(--text-secondary); font-size:13px; margin-bottom:16px;">Ingresa resultados reales para actualizar el torneo. Las tablas de posiciones se recalcularán al instante.</p>
+            
+            <div class="search-bar-container">
+              <input type="text" class="search-input" placeholder="BUSCAR PARTIDO POR PAÍS, CÓDIGO O NÚMERO..." id="admin-search-input" oninput="filterAdminMatches(this.value)">
+            </div>
+            
+            <div style="max-height: 500px; overflow-y: auto;" id="admin-matches-list">
+              <!-- Rendered dynamically -->
+            </div>
+          </div>
+          
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <footer class="app-footer">
+    <div class="footer-legal">
+      <span class="footer-responsabilidad">JUEGA CON RESPONSABILIDAD</span>
+      <span class="footer-age-badge">+18 | SOLO PARA MAYORES DE 18 AÑOS</span>
+    </div>
+    <div class="footer-backer">
+      <span class="backer-label">ECOSISTEMA RESPALDADO POR</span>
+      <a href="https://parley.la/" target="_blank"><img src="./PARLEY LOGO - copia (2).png" alt="Parley Logo" class="footer-logo-img"></a>
+    </div>
+  </footer>
+
+  <!-- FLOAT SLIDE-UP AUTHENTICATION PANEL (Registration, Login, OTP, and Recovery Modal) -->
+  <div class="auth-overlay" id="auth-overlay">
+    <div class="auth-panel">
+      <div class="auth-header">
+        <h3 id="auth-panel-title" style="color:var(--accent);">ACCESO QUINIELA</h3>
+        <button class="btn-close" onclick="closeAuthModal()">✕</button>
+      </div>
+      
+      <!-- Option switcher tabs -->
+      <div class="auth-tabs" id="auth-nav-tabs">
+        <button class="auth-tab active" id="tab-login-btn" onclick="switchAuthTab('login')">INGRESAR</button>
+        <button class="auth-tab" id="tab-register-btn" onclick="switchAuthTab('register')">REGISTRARSE</button>
+      </div>
+      
+      <!-- FORM 1: Login -->
+      <div id="form-login-container">
+        <div class="form-group">
+          <label class="form-label">CÉDULA DE IDENTIDAD</label>
+          <div style="display:flex; gap:10px;">
+            <select id="login-cedula-prefix" class="special-select-input" style="width: 70px; height:50px; font-size:15px; border-radius:var(--radius-md);">
+              <option value="V">V</option>
+              <option value="E">E</option>
+            </select>
+            <input type="text" class="form-input" placeholder="NÚMERO DE CÉDULA" id="login-cedula">
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">CONTRASEÑA</label>
+          <input type="password" class="form-input" placeholder="INGRESA TU CONTRASEÑA" id="login-password">
+        </div>
+        <div style="text-align:right; margin-bottom:16px; font-size:13px;">
+          <a href="#" onclick="switchAuthTab('recover')" style="color: var(--accent); text-decoration:none; font-weight:600;">¿OLVIDASTE TU CONTRASEÑA?</a>
+        </div>
+        <button class="btn-auth-submit" onclick="handleLogin(document.getElementById('login-cedula-prefix').value, document.getElementById('login-cedula').value, document.getElementById('login-password').value)">INGRESAR A LA POLLA</button>
+      </div>
+      
+      <!-- FORM 2: Registry -->
+      <div id="form-register-container" style="display: none;">
+        <div class="form-group">
+          <label class="form-label">NOMBRE COMPLETO</label>
+          <input type="text" class="form-input" placeholder="INGRESA NOMBRE Y APELLIDO" id="reg-name" required>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Nombre de usuario de PARLEY.COM.VE</label>
+          <input type="text" class="form-input" placeholder="INGRESA TU USUARIO DE PARLEY.COM.VE" id="reg-parley-username" required>
+          <div style="margin-top: 6px; font-size: 12px; color: var(--text-secondary);">
+            ¿No tienes un usuario? <a href="https://parley.com.ve/" target="_blank" style="color: var(--accent); font-weight:700; text-decoration:none;">Regístrate aquí en PARLEY.COM.VE</a>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">CÉDULA DE IDENTIDAD</label>
+          <div style="display:flex; gap:10px;">
+            <select id="reg-cedula-prefix" class="special-select-input" style="width: 70px; height:50px; font-size:15px; border-radius:var(--radius-md);" required>
+              <option value="V">V</option>
+              <option value="E">E</option>
+            </select>
+            <input type="text" class="form-input" placeholder="NÚMERO DE CÉDULA" id="reg-cedula" required>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">FECHA DE NACIMIENTO</label>
+          <input type="date" class="form-input" id="reg-dob" required>
+          <!-- Age Block Message Container -->
+          <div id="age-gate-error" class="form-error-msg" style="color:var(--alert); margin-top:8px; display:none; line-height:1.4;">
+            ⚠️ <strong>ACCESO DENEGADO:</strong> Debes ser mayor de 18 años para poder registrarte y participar en la plataforma de quiniela patrocinada.
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">CORREO ELECTRÓNICO</label>
+          <input type="email" class="form-input" placeholder="correo@ejemplo.com" id="reg-email" required>
+        </div>
+        <div class="form-group">
+          <label class="form-label">NÚMERO DE TELÉFONO</label>
+          <input type="tel" class="form-input" placeholder="EJ: 04141234567" id="reg-phone" required>
+        </div>
+        <div class="form-group">
+          <label class="form-label">CONTRASEÑA</label>
+          <input type="password" class="form-input" placeholder="MÍNIMO 6 CARACTERES" id="reg-password" required>
+        </div>
+        <div class="form-group">
+          <label class="form-label">CONFIRMAR CONTRASEÑA</label>
+          <input type="password" class="form-input" placeholder="REPITE TU CONTRASEÑA" id="reg-password-confirm" required>
+        </div>
+        <!-- Disclaimer for Parley Username validity -->
+        <div class="form-group" style="background: rgba(255, 127, 0, 0.05); padding: 12px; border-radius: var(--radius-sm); border: 1.5px solid var(--accent-orange); margin-top: 15px; margin-bottom: 15px;">
+          <p style="font-size: 12px; color: var(--accent-orange); line-height: 1.4; font-weight: 600;">
+            ⚠️ <strong>ATENCIÓN:</strong> Ingresar un usuario falso o errado en su registro provocará que su quiniela sea invalidada y no obtendrá premio.
+          </p>
+        </div>
+        <button class="btn-auth-submit" onclick="handleRegister()">COMPLETAR REGISTRO</button>
+      </div>
+
+      <!-- FORM 4: Password Recovery — Flujo ATC via WhatsApp -->
+      <div id="form-recover-container" style="display: none;">
+        <h4 style="margin-bottom:12px; color:var(--accent); text-align:center;">🔐 RECUPERAR CONTRASEÑA</h4>
+        <!-- Panel ATC WhatsApp -->
+        <div style="background: rgba(37,211,102,0.08); border: 1.5px solid rgba(37,211,102,0.35); border-radius: 12px; padding: 20px; text-align:center;">
+          <div style="font-size:32px; margin-bottom:10px;">💬</div>
+          <p style="font-size:13px; color:var(--text-secondary); margin-bottom:8px; line-height:1.6;">
+            Por seguridad, el restablecimiento de contraseñas se realiza a través de nuestro equipo de <strong style="color:#FFF;">Atención al Cliente</strong>.
+          </p>
+          <p style="font-size:12px; color:var(--text-muted); margin-bottom:18px; line-height:1.5;">
+            Escríbenos por WhatsApp, verificaremos tu identidad y un agente procederá con el reseteo.
+          </p>
+          <a id="btn-whatsapp-recovery"
+             href="https://wa.me/5804242322986?text=Hola%2C%20necesito%20restablecer%20mi%20clave%20de%20la%20Polla%20Mundialista.%20Mi%20c%C3%A9dula%20es%3A%20"
+             target="_blank"
+             rel="noopener noreferrer"
+             style="display:inline-flex; align-items:center; gap:10px; background: linear-gradient(135deg,#25D366,#128C7E); color:#FFF; font-weight:800; font-size:14px; padding:12px 24px; border-radius:30px; text-decoration:none; letter-spacing:0.05em; box-shadow: 0 4px 20px rgba(37,211,102,0.35); transition: transform 0.2s;" onmouseover="this.style.transform='scale(1.04)'" onmouseout="this.style.transform='scale(1)'">
+            <svg viewBox="0 0 24 24" style="width:20px;height:20px;fill:currentColor;"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+            CONTACTAR POR WHATSAPP
+          </a>
+        </div>
+        <div style="text-align:center; margin-top:20px; font-size:13px;">
+          <a href="#" onclick="switchAuthTab('login')" style="color:var(--text-secondary); text-decoration:none; font-weight:600;">← VOLVER AL INICIO DE SESIÓN</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- INTERACTIVE TUTORIAL MODE ONBOARDING MODAL -->
+  <div class="modal-overlay" id="tutorial-modal">
+    <div class="modal-container">
+      <div class="tutorial-slider">
+        
+        <!-- Slide 1 -->
+        <div class="tutorial-slide active">
+          <div class="tutorial-icon">🌎</div>
+          <h3 class="tutorial-title">COMPETICIÓN GLOBAL</h3>
+          <p class="tutorial-desc" style="line-height: 1.6;">
+            ¡Estás en la <strong>Polla Mundialista</strong>! ⚽🔥
+            <br><br>
+            Aquí compites contra todo el país en una emocionante tabla general en modalidad <strong>"Todos contra Todos"</strong>.
+            <br><br>
+            ¡Demuestra tus conocimientos en 3 pasos!
+            <br>
+            <br>🎯 <strong>1. Registra tus marcadores:</strong> Pronostica los resultados de cada partido.
+            <br>📈 <strong>2. Suma puntos:</strong> Escala posiciones en la gran tabla clasificatoria.
+            <br>🏆 <strong>3. ¡Conquista el podio!</strong> Enfréntate a los mejores y corónate campeón.
+          </p>
+        </div>
+        
+        <!-- Slide 2 -->
+        <div class="tutorial-slide">
+          <div class="tutorial-icon">📊</div>
+          <h3 class="tutorial-title">DESGLOSE DE PUNTOS</h3>
+          <p class="tutorial-desc" style="line-height: 1.5; font-size: 13px; text-align: left; max-width: 440px; margin: 0 auto;">
+            <strong>📊 ¿Cómo sumar puntos?</strong>
+            <br><br>
+            <strong>🎯 Puntuación Base:</strong>
+            <br>• <strong>Marcador Exacto:</strong> ¡Consigue <strong>+6 PTS</strong>!
+            <br>• <strong>Ganador 1X2:</strong> Suma <strong>+3 PTS</strong> (si no aciertas el marcador exacto).
+            <br>• <strong>Diferencia de Goles:</strong> Suma <strong>+2 PTS</strong> (No aplica en EMPATES).
+            <br><br>
+            <strong>🎖️ Puntos Extra por Insignias:</strong>
+            <br>• ⚡ <strong>Activo:</strong> +5 PTS | 🔄 <strong>Frecuente:</strong> +10 PTS
+            <br>• 🧠 <strong>Clínico:</strong> +15 PTS | 🔮 <strong>Oráculo:</strong> +15 PTS
+            <br>• 🎩 <strong>HAT-TRICK VIP:</strong> +20 PTS
+            <br><br>
+            <strong>🚨 El Multiplicador:</strong>
+            <br>• <strong>Comodines:</strong> Activa hasta 3 comodines de alarma (🚨) para duplicar tus puntos en los partidos que elijas.
+          </p>
+        </div>
+        
+        <!-- Slide 3 -->
+        <div class="tutorial-slide">
+          <div class="tutorial-icon">⏳</div>
+          <h3 class="tutorial-title">REGLA DE BLOQUEO</h3>
+          <p class="tutorial-desc">Las predicciones se congelan estrictamente <strong>10 minutos antes</strong> de la hora oficial del pitazo inicial de cada partido. Las predicciones de tus rivales se mantendrán ocultas (🔒 oculto) hasta entonces para evitar el plagio.</p>
+        </div>
+        
+        <!-- Slide 4 -->
+        <div class="tutorial-slide">
+          <div class="tutorial-icon">🔮</div>
+          <h3 class="tutorial-title">EL ORÁCULO DE LOS GRUPOS</h3>
+          <p class="tutorial-desc" style="line-height: 1.5; font-size: 13px; text-align: left; max-width: 440px; margin: 0 auto;">
+            ¿Quién ganará cada grupo? Selecciona el equipo que clasificará en 1ª posición en los grupos A-L.
+            <br><br>
+            🎯 <strong>Reglas de Puntuación:</strong>
+            <br>• Sumas <strong>+5 PTS</strong> por cada líder acertado.
+            <br>• Los puntos se activan al concluir el último partido de cada grupo.
+            <br><br>
+            🔒 <strong>Bloqueo Estricto:</strong> Se cierra el <strong>22 de junio de 2026, 11:00 AM</strong>. ¡No te quedes sin participar!
+          </p>
+        </div>
+        
+      </div>
+      
+      <!-- Navigation controls dots and skip -->
+      <div class="tutorial-dots">
+        <span class="dot active" onclick="showTutorialSlide(0)"></span>
+        <span class="dot" onclick="showTutorialSlide(1)"></span>
+        <span class="dot" onclick="showTutorialSlide(2)"></span>
+        <span class="dot" onclick="showTutorialSlide(3)"></span>
+      </div>
+      
+      <div class="tutorial-footer">
+        <button class="btn-tutorial-skip" onclick="closeTutorialModal()">OMITIR</button>
+        <button class="btn-tutorial-next" id="btn-tutorial-next" onclick="nextTutorialSlide()">SIGUIENTE</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- HEAD-TO-HEAD VS COMPARATOR MODAL -->
+  <div class="modal-overlay" id="vs-modal">
+    <div class="modal-container" style="max-width: 600px; max-height:85vh; display:flex; flex-direction:column; padding:24px; overflow:hidden;">
+      <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--border-sutil); padding-bottom:12px; margin-bottom:16px; flex-shrink:0;">
+        <h3 class="modal-header-title">CARA A CARA &nbsp;(VS)</h3>
+        <button class="btn-close" onclick="closeVSModal()">✕</button>
+      </div>
+      
+      <!-- VS header profiles side-by-side (CSS Grid for perfect mathematical alignment) -->
+      <div class="vs-modal-header-grid" style="flex-shrink:0;">
+        <div class="vs-header-name vs-name-left" id="vs-name-a">TÚ</div>
+        <div class="vs-header-vs-container">
+          <div class="vs-badge-center">VS</div>
+        </div>
+        <div class="vs-header-name vs-name-right" id="vs-name-b">RIVAL</div>
+        
+        <div class="vs-header-pts vs-pts-left" id="vs-pts-a">0 PTS</div>
+        <div class="vs-header-pts vs-pts-right" id="vs-pts-b">0 PTS</div>
+      </div>
+      
+      <!-- Parallel predictions list area -->
+      <div id="vs-comparisons-container" style="margin-top:20px; flex:1; overflow-y:auto; padding-right:6px; padding-bottom:40px;">
+        <!-- Populated dynamically -->
+      </div>
+    </div>
+  </div>
+
+  <!-- ADMIN USER DETAILS INSPECTOR MODAL -->
+  <div class="modal-overlay" id="admin-user-modal">
+    <div class="modal-container" style="max-width: 600px; max-height:85vh; overflow-y:auto; padding:24px; border-top: 2px solid var(--accent); background: var(--bg-secondary);">
+      <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--border-sutil); padding-bottom:12px; margin-bottom:16px;">
+        <h3 class="modal-header-title">DETALLES DEL USUARIO</h3>
+        <button class="btn-close" onclick="closeAdminUserModal()">✕</button>
+      </div>
+      
+      <!-- User Info Grid -->
+      <div class="glass-card" style="padding:16px; margin-bottom:16px; background: rgba(0,0,0,0.2);">
+        <h4 style="color:var(--accent); font-size:14px; margin-bottom:10px;">DATOS PERSONALES</h4>
+        
+        <!-- View Mode (Static info labels) -->
+        <div id="admin-inspect-data-view" style="display:grid; grid-template-columns:1fr 1fr; gap:12px; font-size:13px;">
+          <div><span style="color:var(--text-secondary);">NOMBRE:</span> <strong id="admin-inspect-name">-</strong></div>
+          <div><span style="color:var(--text-secondary);">ID ÚNICO:</span> <strong id="admin-inspect-id">-</strong></div>
+          <div><span style="color:var(--text-secondary);">CÉDULA:</span> <strong id="admin-inspect-cedula">-</strong></div>
+          <div><span style="color:var(--text-secondary);">TELÉFONO:</span> <strong id="admin-inspect-phone">-</strong></div>
+          <div><span style="color:var(--text-secondary);">CORREO:</span> <strong id="admin-inspect-email">-</strong></div>
+          <div><span style="color:var(--text-secondary);">F. NACIMIENTO:</span> <strong id="admin-inspect-dob">-</strong></div>
+          <div style="grid-column: span 2;"><span style="color:var(--text-secondary);">USUARIO PARLEY:</span> <strong id="admin-inspect-parley-username">-</strong></div>
+        </div>
+
+        <!-- Edit Mode (Inputs form) -->
+        <div id="admin-inspect-edit-form" style="display:none; grid-template-columns:1fr 1fr; gap:12px; font-size:13px; margin-bottom:12px;">
+          <div style="grid-column: span 2;">
+            <label style="color:var(--text-secondary); font-size:11px; font-weight:700;">NOMBRE COMPLETO:</label>
+            <input type="text" id="admin-edit-name" class="search-input" style="margin-top:4px; width:100%; height:36px; background:#070C14; color:#FFF; border:1px solid var(--border-sutil); border-radius:4px; padding:0 8px;">
+          </div>
+          <div>
+            <label style="color:var(--text-secondary); font-size:11px; font-weight:700;">CÉDULA:</label>
+            <input type="text" id="admin-edit-cedula" class="search-input" style="margin-top:4px; width:100%; height:36px; background:#070C14; color:#FFF; border:1px solid var(--border-sutil); border-radius:4px; padding:0 8px;">
+          </div>
+          <div>
+            <label style="color:var(--text-secondary); font-size:11px; font-weight:700;">TELÉFONO:</label>
+            <input type="text" id="admin-edit-phone" class="search-input" style="margin-top:4px; width:100%; height:36px; background:#070C14; color:#FFF; border:1px solid var(--border-sutil); border-radius:4px; padding:0 8px;">
+          </div>
+          <div>
+            <label style="color:var(--text-secondary); font-size:11px; font-weight:700;">CORREO ELECTRÓNICO:</label>
+            <input type="email" id="admin-edit-email" class="search-input" style="margin-top:4px; width:100%; height:36px; background:#070C14; color:#FFF; border:1px solid var(--border-sutil); border-radius:4px; padding:0 8px;">
+          </div>
+          <div>
+            <label style="color:var(--text-secondary); font-size:11px; font-weight:700;">F. NACIMIENTO:</label>
+            <input type="date" id="admin-edit-dob" class="search-input" style="margin-top:4px; width:100%; height:36px; background:#070C14; color:#FFF; border:1px solid var(--border-sutil); border-radius:4px; padding:0 8px;">
+          </div>
+          <div style="grid-column: span 2;">
+            <label style="color:var(--text-secondary); font-size:11px; font-weight:700;">USUARIO PARLEY:</label>
+            <input type="text" id="admin-edit-parley-username" class="search-input" style="margin-top:4px; width:100%; height:36px; background:#070C14; color:#FFF; border:1px solid var(--border-sutil); border-radius:4px; padding:0 8px;">
+          </div>
+        </div>
+
+        <div style="margin-top:12px; display:flex; gap:10px; margin-bottom:12px; flex-wrap:wrap;" id="admin-inspect-data-actions">
+          <button id="btn-admin-edit-user" class="btn-admin-action" style="padding: 6px 12px; font-size: 11px; margin-top: 0;" onclick="adminEnableEditUser()">📝 EDITAR DATOS</button>
+          <button id="btn-admin-reset-pass" class="btn-admin-action" style="padding: 6px 12px; font-size: 11px; margin-top: 0; border-color:#F59E0B; color:#F59E0B;" onclick="adminOpenResetPasswordModal()">🔑 RESET CLAVE</button>
+          <button id="btn-admin-save-user" class="btn-admin-action" style="display:none; padding: 6px 12px; font-size: 11px; margin-top: 0; border-color:var(--accent); color:var(--accent);" onclick="adminSaveUserChanges()">💾 GUARDAR</button>
+          <button id="btn-admin-cancel-user" class="btn-admin-action" style="display:none; padding: 6px 12px; font-size: 11px; margin-top: 0; border-color:var(--text-secondary); color:var(--text-secondary);" onclick="adminCancelUserEdit()">✕ CANCELAR</button>
+        </div>
+
+        <div class="admin-vip-badge-row">
+          <span style="color: var(--accent); font-weight: 700;">INSIGNIA VIP:</span>
+          <button id="btn-toggle-vip-badge" class="btn-admin-action" style="padding: 6px 12px; font-size: 11px; margin-top: 0;" onclick="adminToggleVipBadge()">ASIGNAR HAT-TRICK VIP</button>
+        </div>
+      </div>
+
+      <!-- User Score Breakdown -->
+      <div class="glass-card" style="padding:16px; margin-bottom:16px; background: rgba(0,0,0,0.2);">
+        <h4 style="color:var(--accent); font-size:14px; margin-bottom:10px;">RESUMEN DE PUNTOS</h4>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; font-size:13px;">
+          <div><span style="color:var(--text-secondary);">PUNTAJE GENERAL:</span> <strong style="color:var(--accent); font-size:15px;" id="admin-inspect-points">0 PTS</strong></div>
+          <div><span style="color:var(--text-secondary);">PUNTOS EXACTOS:</span> <strong id="admin-inspect-exacts">0 PTS</strong></div>
+          <div><span style="color:var(--text-secondary);">PUNTOS 1X2 SIMPLE:</span> <strong id="admin-inspect-1x2">0 PTS</strong></div>
+          <div><span style="color:var(--text-secondary);">PUNTOS DIF. GOLES:</span> <strong id="admin-inspect-gd">0 PTS</strong></div>
+          <div><span style="color:var(--text-secondary);">PUNTOS LÍDERES GRUPO:</span> <strong id="admin-inspect-group-leaders">0 PTS</strong></div>
+          <div><span style="color:var(--text-secondary);">PUNTOS INSIGNIAS:</span> <strong id="admin-inspect-badges-pts">0 PTS</strong></div>
+          <div style="grid-column: span 2;"><span style="color:var(--text-secondary);">INSIGNIAS OBTENIDAS:</span> <strong id="admin-inspect-badges">-</strong></div>
+        </div>
+        <div style="margin-top:12px; border-top:1px dashed var(--border-sutil); padding-top:10px;">
+          <button id="btn-show-audit-log" class="btn-admin-action" style="padding: 6px 12px; font-size: 11px; margin-top: 0; width: 100%;" onclick="adminToggleAuditLog()">🔍 VER AUDITORÍA DETALLADA DE PUNTOS</button>
+        </div>
+      </div>
+
+      <!-- Audit Log Panel (Hidden by default) -->
+      <div id="admin-inspect-audit-panel" class="glass-card" style="display:none; padding:16px; margin-bottom:16px; background: rgba(7, 12, 20, 0.95); border: 1px solid var(--accent);">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; border-bottom:1px solid var(--border-sutil); padding-bottom:8px;">
+          <h4 style="color:var(--accent); font-size:13px; margin:0; letter-spacing:0.05em;">INFORME DE CÓMPUTO PROBATORIO</h4>
+          <button class="btn-admin-action" style="padding:4px 8px; font-size:10px; margin:0; border-color:var(--accent); color:var(--accent);" onclick="adminCopyAuditReport()">📋 COPIAR DETALLE</button>
+        </div>
+        <pre id="admin-inspect-audit-text" style="font-family:monospace; font-size:11px; white-space:pre-wrap; background:rgba(0,0,0,0.4); padding:10px; border-radius:4px; max-height:220px; overflow-y:auto; color:#E2E8F0; border:1px solid rgba(255,255,255,0.05); margin:0; line-height:1.4;"></pre>
+      </div>
+
+      <!-- Predictions Ticket (Visual representation) -->
+      <div class="glass-card" style="padding:20px; background:#0B111E; border:1px dashed var(--border-sutil); border-radius:var(--radius-md); box-shadow:none;">
+        <h4 style="color:#FFF; text-align:center; font-size:13px; letter-spacing:0.1em; margin-bottom:14px; border-bottom:1px dashed var(--border-sutil); padding-bottom:8px;">TICKET DE JUGADAS OFICIAL</h4>
+        <div id="admin-inspect-ticket-container" style="display:flex; flex-direction:column; gap:10px; max-height:300px; overflow-y:auto; padding-right:4px;">
+          <!-- Loaded dynamically in app.js -->
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- MODAL: ADMIN RESET PASSWORD SUB-MODAL -->
+  <!-- ============================================================ -->
+  <div class="modal-overlay" id="admin-reset-pass-modal" onclick="if(event.target===this)document.getElementById('admin-reset-pass-modal').classList.remove('active')">
+    <div class="modal-container" style="max-width:420px; padding:28px; border-top:2px solid #F59E0B;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+        <h3 style="color:#F59E0B; font-size:16px; margin:0;">🔑 RESTABLECER CONTRASEÑA</h3>
+        <button class="btn-close" onclick="document.getElementById('admin-reset-pass-modal').classList.remove('active')">✕</button>
+      </div>
+      <div id="admin-reset-pass-user-info" style="font-size:13px; color:var(--text-secondary); margin-bottom:20px; background:rgba(255,255,255,0.03); padding:10px; border-radius:8px; border:1px solid var(--border-sutil);"></div>
+      <div class="form-group" style="margin-bottom:8px;">
+        <label class="form-label" style="font-size:11px;">NUEVA CONTRASEÑA</label>
+        <div style="position:relative;">
+          <input type="password" id="admin-reset-pass-input" class="form-input" value="Parley2026" placeholder="Mínimo 6 caracteres" style="padding-right:44px;">
+          <button onclick="toggleAdminResetPassVisibility()" style="position:absolute; right:12px; top:50%; transform:translateY(-50%); background:none; border:none; color:var(--text-secondary); cursor:pointer; font-size:16px;" id="admin-reset-pass-eye">👁</button>
+        </div>
+      </div>
+      <p style="font-size:11px; color:#F59E0B; margin-bottom:20px; line-height:1.5;">⚠️ Esta clave es temporal. Comunícasela al usuario por el canal de Atención al Cliente para que la cambie al ingresar.</p>
+      <div style="display:flex; gap:10px;">
+        <button class="btn-admin-action" style="flex:1; border-color:var(--text-secondary); color:var(--text-secondary);" onclick="document.getElementById('admin-reset-pass-modal').classList.remove('active')">CANCELAR</button>
+        <button class="btn-admin-action" id="btn-confirm-reset-pass" style="flex:1; border-color:#22C55E; color:#22C55E; font-weight:800;" onclick="adminConfirmResetPassword()">✅ RESETEAR</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- MODAL: FORCED PASSWORD CHANGE (Inescapable — clave temporal) -->
+  <!-- ============================================================ -->
+  <div id="forced-pass-change-overlay" style="display:none; position:fixed; inset:0; z-index:99999; background:rgba(7,12,20,0.97); display:none; align-items:center; justify-content:center; padding:20px;">
+    <div style="background: linear-gradient(145deg, #0E1626, #13223F); border:2px solid #F59E0B; border-radius:16px; max-width:420px; width:100%; padding:32px; box-shadow: 0 20px 60px rgba(0,0,0,0.8);">
+      <div style="text-align:center; margin-bottom:24px;">
+        <div style="font-size:48px; margin-bottom:12px;">🔐</div>
+        <h2 style="color:#F59E0B; font-size:20px; font-weight:900; margin-bottom:8px;">CAMBIO DE CONTRASEÑA REQUERIDO</h2>
+        <p style="color:var(--text-secondary); font-size:13px; line-height:1.6;">Estás ingresando con una contraseña temporal asignada por el equipo de soporte. Debes crear una contraseña personalizada para continuar.</p>
+      </div>
+      <div class="form-group" style="margin-bottom:12px;">
+        <label class="form-label" style="font-size:11px;">NUEVA CONTRASEÑA</label>
+        <div style="position:relative;">
+          <input type="password" id="forced-new-pass" class="form-input" placeholder="Mínimo 6 caracteres" style="padding-right:44px;">
+          <button onclick="document.getElementById('forced-new-pass').type=document.getElementById('forced-new-pass').type==='password'?'text':'password'" style="position:absolute;right:12px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--text-secondary);cursor:pointer;font-size:16px;">👁</button>
+        </div>
+      </div>
+      <div class="form-group" style="margin-bottom:24px;">
+        <label class="form-label" style="font-size:11px;">CONFIRMAR CONTRASEÑA</label>
+        <input type="password" id="forced-confirm-pass" class="form-input" placeholder="Repite tu nueva contraseña">
+      </div>
+      <button class="btn-auth-submit" id="btn-forced-pass-submit" onclick="handleForcedPasswordChange()" style="width:100%; font-size:15px; font-weight:900;">GUARDAR MI CONTRASEÑA</button>
+      <p style="text-align:center; font-size:11px; color:var(--text-muted); margin-top:12px;">Esta acción es obligatoria para acceder a la Polla Mundialista.</p>
+    </div>
+  </div>
+
+  <!-- SECTION: COMPARTIR TICKET DE INVITADO -->
+  <section id="shared-ticket-section" class="app-section" style="display: none;">
+    <div id="shared-ticket-view"></div>
+  </section>
+
+  <!-- FLOATING MOBILE BOTTOM NAVIGATION BAR -->
+  <nav class="mobile-nav-bar">
+    <div class="nav-item active" onclick="navigateTo('inicio')">
+      <svg viewBox="0 0 24 24">
+        <path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/>
+      </svg>
+      <span>INICIO</span>
+    </div>
+    <div class="nav-item" onclick="navigateTo('pronosticos')">
+      <svg viewBox="0 0 24 24">
+        <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/>
+      </svg>
+      <span>PRONÓSTICOS</span>
+    </div>
+    <div class="nav-brand-powered">
+      <span class="powered-text">POWERED BY</span>
+      <img src="./PARLEY LOGO - copia (2).png" alt="Parley Logo" class="nav-powered-logo" loading="lazy">
+    </div>
+    <div class="nav-item" onclick="navigateTo('clasificacion')">
+      <svg viewBox="0 0 24 24">
+        <path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 1.34 5 3s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/>
+      </svg>
+      <span>CLASIFICACIÓN</span>
+    </div>
+    <div class="nav-item" onclick="navigateTo('grupos')">
+      <svg viewBox="0 0 24 24">
+        <path d="M4 15h16v-2H4v2zm0 4h16v-2H4v2zm0-8h16V9H4v2zm0-6v2h16V5H4z"/>
+      </svg>
+      <span>GRUPOS</span>
+    </div>
+    <div class="nav-item" onclick="navigateTo('admin')" id="nav-item-admin" style="display: none;">
+      <svg viewBox="0 0 24 24">
+        <path d="M19.43 12.98c.04-.32.07-.64.07-.98s-.03-.66-.07-.98l2.11-1.65c.19-.15.24-.42.12-.64l-2-3.46c-.12-.22-.39-.3-.61-.22l-2.49 1c-.52-.4-1.08-.73-1.69-.98l-.38-2.65C14.46 2.18 14.25 2 14 2h-4c-.25 0-.46.18-.49.42l-.38 2.65c-.61.25-1.17.59-1.69.98l-2.49-1c-.23-.09-.49 0-.61.22l-2 3.46c-.13.22-.07.49.12.64l2.11 1.65c-.04.32-.07.65-.07.98s.03.66.07.98l-2.11 1.65c-.19.15-.24.42-.12.64l2 3.46c.12.22.39.3.61.22l2.49-1c.52.4 1.08.73 1.69.98l.38 2.65c.03.24.24.42.49.42h4c.25 0 .46-.18.49-.42l.38-2.65c.61-.25 1.17-.59 1.69-.98l2.49 1c.23.09.49 0 .61-.22l2-3.46c.12-.22.07-.49-.12-.64l-2.11-1.65zM12 15.5c-1.93 0-3.5-1.57-3.5-3.5s1.57-3.5 3.5-3.5 3.5 1.57 3.5 3.5-1.57 3.5-3.5 3.5z"/>
+      </svg>
+      <span>ADMIN</span>
+    </div>
+  </nav>
+
+  <!-- USER TICKET VIEW MODAL -->
+  <div class="modal-overlay" id="ticket-modal" onclick="if (event.target === this) closeTicketModal()">
+    <div class="modal-container" id="ticket-modal-container">
+      <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--border-sutil); padding-bottom:12px; margin-bottom:16px; flex-shrink:0;">
+        <h3 class="modal-header-title" id="ticket-modal-title-text">MI TICKET DE PRONÓSTICOS</h3>
+        <button class="btn-close" onclick="closeTicketModal()">✕</button>
+      </div>
+      
+      <!-- User stats summary in ticket -->
+      <div class="ticket-header-summary">
+        <div style="flex: 1; min-width: 0; margin-right: 12px;">
+          <div style="font-size:11px; color:var(--text-muted); text-transform:uppercase; font-weight:700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Usuario: <strong style="color:#FFF;" id="ticket-user-name">-</strong></div>
+          <div id="ticket-user-id-container" style="font-size:11px; color:var(--text-muted); text-transform:uppercase; font-weight:700; margin-top:2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">ID de Jugador: <strong style="color:var(--accent);" id="ticket-user-id">-</strong></div>
+        </div>
+        <div style="text-align:right; flex-shrink: 0;">
+          <div style="font-size:16px; font-weight:900; color:var(--accent);" id="ticket-user-points">0 PTS</div>
+          <div style="font-size:10px; color:var(--text-secondary); font-weight:700;">Puntaje Total</div>
+        </div>
+      </div>
+      
+      <!-- Scrollable list of user predictions -->
+      <div id="my-ticket-predictions-container" style="flex:1; overflow-y:auto; padding-right:4px;">
+        <!-- Populated dynamically -->
+      </div>
+
+      <!-- Push Notifications Toggle Option -->
+      <div id="ticket-push-notifications-container" style="border-top: 1px solid var(--border-sutil); padding-top: 12px; margin-top: 12px; display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-shrink: 0;">
+        <div style="display: flex; flex-direction: column; gap: 2px;">
+          <span style="font-size: 12px; font-weight: 700; color: #FFF;">NOTIFICACIONES DE LA POLLA</span>
+          <span style="font-size: 10px; color: var(--text-secondary);">Recibe alertas de goles, resultados y tu score diario.</span>
+        </div>
+        <label class="switch">
+          <input type="checkbox" id="push-notifications-toggle" onchange="togglePushNotifications(this.checked)">
+          <span class="slider-toggle"></span>
+        </label>
+      </div>
+
+      <!-- Modal Footer with share button -->
+      <div style="border-top: 1px solid var(--border-sutil); padding-top: 16px; margin-top: 16px; flex-shrink:0; display:flex; gap:10px;" id="ticket-modal-footer">
+        <button class="btn-league-action" style="flex:1; padding: 12px; font-size:13px; font-weight:700; border:1.5px solid #FFFFFF;" onclick="closeTicketModal()">CERRAR</button>
+        <button class="btn-hero-cta" style="flex:1; padding: 12px; font-size:13px; font-weight:700; display:flex; align-items:center; justify-content:center; gap:8px;" id="btn-share-my-ticket" onclick="shareUserTicket()">
+          <svg viewBox="0 0 24 24" style="width:18px; height:18px; fill:currentColor;">
+            <path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81 1.66 0 3-1.34 3-3s-1.34-3-3-3-3 1.34-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9c-1.66 0-3 1.34-3 3s1.34 3 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.16c-.05.21-.08.43-.08.65 0 1.61 1.31 2.92 2.92 2.92 1.61 0 2.92-1.31 2.92-2.92s-1.31-2.92-2.92-2.92z"/>
+          </svg>
+          COMPARTIR TICKET
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- BADGE DETAILS MODAL -->
+  <div class="modal-overlay" id="badge-modal" onclick="if (event.target === this) closeBadgeModal()">
+    <div class="modal-container badge-modal-container">
+      <button class="btn-close badge-modal-close-top" onclick="closeBadgeModal()">✕</button>
+      <div class="badge-modal-content">
+        <div class="badge-modal-emoji" id="badge-modal-emoji">🏆</div>
+        <h3 class="badge-modal-title" id="badge-modal-title">Título de la Insignia</h3>
+        <div class="badge-modal-status" id="badge-modal-status">Pendiente (+10 PTS)</div>
+        <p class="badge-modal-description" id="badge-modal-description">Descripción detallada de la insignia y sus requisitos.</p>
+        <button class="btn-league-action badge-modal-close-btn" style="margin-top: 20px; width: 100%; border: 1.5px solid #FFFFFF;" onclick="closeBadgeModal()">CERRAR</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Supabase JS Library Localized -->
+  <script src="./supabase-js.js"></script>
+  
+  <!-- Script logic imports -->
+  <script src="./world_cup_data.js"></script>
+  <script src="./app.js"></script>
+</body>
+</html>

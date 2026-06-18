@@ -1,0 +1,7 @@
+EDGE_FUNCTION_SECRETS.txt
+supabase.exe
+supabase-go.exe
+check_errors.py
+check_mock_errors.py
+tests/
+.agents/

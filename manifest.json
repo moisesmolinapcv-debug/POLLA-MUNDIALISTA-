@@ -1,0 +1,18 @@
+{
+  "name": "Polla Mundial 2026 - Parley",
+  "short_name": "Polla Parley",
+  "description": "La quiniela digital oficial para la Copa del Mundo 2026, patrocinada por Parley.com.ve",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#070C14",
+  "theme_color": "#0E1626",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "Icono Oficial de la App.png",
+      "sizes": "256x256",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
