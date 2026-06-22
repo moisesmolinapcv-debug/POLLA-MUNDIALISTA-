@@ -36,7 +36,10 @@ USING (
   OR EXISTS (
     SELECT 1 FROM matches 
     WHERE matches.match_no = predictions.match_no 
-    AND now() >= (matches.match_date - INTERVAL '10 minutes')
+    AND (
+      now() >= (matches.match_date - INTERVAL '10 minutes')
+      OR (matches.home_score IS NOT NULL AND matches.away_score IS NOT NULL)
+    )
   )
 );
 
@@ -92,6 +95,11 @@ BEGIN
     
     IF v_is_admin THEN
         RETURN NEW;
+    END IF;
+
+    -- NEW: Restrict predictions to match range #41 to #72 for non-admin users
+    IF NEW.match_no < 41 OR NEW.match_no > 72 THEN
+        RAISE EXCEPTION 'Este partido no está disponible para pronósticos de usuarios.';
     END IF;
 
     -- 2. Check tournament completion state
@@ -150,8 +158,8 @@ BEGIN
         RETURN NEW;
     END IF;
 
-    -- 2. Lockout check: Group stage kickoff deadline (June 18, 2026 at 10:00 AM VET / 2:00 PM UTC)
-    IF now() >= '2026-06-18 14:00:00+00'::TIMESTAMPTZ THEN
+    -- 2. Lockout check: Group stage kickoff deadline (June 23, 2026 at 12:00 PM VET / 4:00 PM UTC)
+    IF now() >= '2026-06-23 16:00:00+00'::TIMESTAMPTZ THEN
         RAISE EXCEPTION 'El período para seleccionar líderes de grupo ha expirado.';
     END IF;
     
@@ -165,6 +173,44 @@ CREATE TRIGGER trg_check_special_predictions_lockout
 BEFORE INSERT OR UPDATE ON group_leader_predictions
 FOR EACH ROW
 EXECUTE FUNCTION check_special_predictions_lockout();
+
+
+-- ----------------------------------------------------------------------------
+-- SECTION 2B: DATABASE STRENGTHENING AND INTEGRITY CONSTRAINTS
+-- Description:
+--   Añade restricciones CHECK para asegurar que los marcadores estén entre 0 y 99.
+--   Añade un trigger para proteger roles administrativos de actualizaciones por cliente.
+-- ----------------------------------------------------------------------------
+
+-- 1. Restricción de rango de marcadores en predictions (0 a 99 goles)
+ALTER TABLE public.predictions DROP CONSTRAINT IF EXISTS check_predictions_scores;
+ALTER TABLE public.predictions ADD CONSTRAINT check_predictions_scores 
+  CHECK (home_score >= 0 AND home_score <= 99 AND away_score >= 0 AND away_score <= 99);
+
+-- 2. Restricción de rango de marcadores en matches (0 a 99 goles)
+ALTER TABLE public.matches DROP CONSTRAINT IF EXISTS check_matches_scores;
+ALTER TABLE public.matches ADD CONSTRAINT check_matches_scores 
+  CHECK ((home_score IS NULL) OR (home_score >= 0 AND home_score <= 99 AND away_score >= 0 AND away_score <= 99));
+
+-- 3. Trigger para bloquear por completo la modificación de roles administrativos desde el cliente
+CREATE OR REPLACE FUNCTION protect_profile_roles()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF (OLD.is_admin IS DISTINCT FROM NEW.is_admin OR OLD.is_mock IS DISTINCT FROM NEW.is_mock) THEN
+    IF current_setting('role', true) IN ('authenticated', 'anon') THEN
+      RAISE EXCEPTION 'Acción rechazada: No se permite modificar roles administrativos (is_admin, is_mock) a través de la API del cliente.';
+    END IF;
+  END IF;
+  
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Recrear el trigger en la tabla profiles
+DROP TRIGGER IF EXISTS trg_protect_profile_roles ON public.profiles;
+CREATE TRIGGER trg_protect_profile_roles
+  BEFORE UPDATE ON public.profiles
+  FOR EACH ROW EXECUTE FUNCTION protect_profile_roles();
 
 
 -- ----------------------------------------------------------------------------
@@ -191,8 +237,7 @@ WHERE stage = 'group'
 GROUP BY group_letter;
 
 -- 2. View: team_standings
---   Calculates dynamic team standings for each group from matches data.
---   Sorts teams using the following criteria: points, goal difference (gd), goals for (gf).
+--   Calculates dynamic team standings for each group from matches data, respecting manual overrides.
 CREATE OR REPLACE VIEW team_standings AS
 WITH team_stats AS (
   -- Home match statistics
@@ -240,15 +285,50 @@ aggregated_stats AS (
     (SUM(wins) * 3 + SUM(draws) * 1) as pts
   FROM team_stats
   GROUP BY group_letter, team_code
+),
+overrides AS (
+  SELECT COALESCE(
+    (SELECT value::jsonb FROM app_config WHERE key = 'group_standings_overrides'),
+    '{}'::jsonb
+  ) as data
+),
+ordered_stats AS (
+  SELECT 
+    a.group_letter,
+    a.team_code,
+    a.played,
+    a.wins,
+    a.draws,
+    a.losses,
+    a.gf,
+    a.ga,
+    a.gd,
+    a.pts,
+    COALESCE(
+      (
+        SELECT idx - 1
+        FROM overrides o,
+             jsonb_array_elements_text(o.data->a.group_letter) WITH ORDINALITY AS elem(val, idx)
+        WHERE val = a.team_code
+        LIMIT 1
+      ),
+      -1
+    ) AS override_pos
+  FROM aggregated_stats a
 )
 SELECT 
   group_letter,
   team_code,
   ROW_NUMBER() OVER (
     PARTITION BY group_letter 
-    ORDER BY pts DESC, gd DESC, gf DESC
+    ORDER BY 
+      CASE WHEN override_pos >= 0 THEN override_pos ELSE 9999 END ASC,
+      pts DESC, 
+      gd DESC, 
+      gf DESC,
+      team_code ASC
   ) as rank
-FROM aggregated_stats;
+FROM ordered_stats;
 
 -- 3. View: real_group_leaders
 --   Filters the team_standings view to get the leader (rank = 1) for each group.
@@ -266,8 +346,8 @@ WHERE rank = 1;
 --       - If outcome is correct, not a draw, and goal difference is exact: +2 points. Wildcard doubles to +4 (total 10).
 --     - Correct Group Leader: 5 points (only calculated once all group stage matches are finished).
 --     - Badges points:
---       - Pronosticador Activo (>= 50 predictions): 5 pts
---       - Ganador Frecuente (>= 15 correct outcomes): 10 pts
+--       - Pronosticador Activo (>= 25 predictions): 5 pts
+--       - Ganador Frecuente (>= 12 correct outcomes): 10 pts
 --       - Ojo Clínico (>= 3 exact predictions): 15 pts
 --       - Oráculo de Grupos (>= 6 correct group leaders): 15 pts
 --       - HAT-TRICK VIP (assigned badge): 20 pts
@@ -340,8 +420,8 @@ SELECT
   -- Calculate individual badge criteria points
   (
     (CASE WHEN COALESCE(mp.exacts_count, 0) >= 3 THEN 15 ELSE 0 END) +
-    (CASE WHEN COALESCE(mp.outcomes_count, 0) >= 15 THEN 10 ELSE 0 END) +
-    (CASE WHEN COALESCE(mp.predictions_count, 0) >= 50 THEN 5 ELSE 0 END) +
+    (CASE WHEN COALESCE(mp.outcomes_count, 0) >= 12 THEN 10 ELSE 0 END) +
+    (CASE WHEN COALESCE(mp.predictions_count, 0) >= 25 THEN 5 ELSE 0 END) +
     (CASE WHEN COALESCE(gp.correct_leaders_count, 0) >= 6 THEN 15 ELSE 0 END) +
     (CASE WHEN COALESCE(prof.badges, ARRAY[]::text[]) @> ARRAY['HAT-TRICK VIP']::text[] THEN 20 ELSE 0 END)
   ) AS badges_points,
@@ -352,8 +432,8 @@ SELECT
     COALESCE(gp.group_leader_points, 0) + 
     (
       (CASE WHEN COALESCE(mp.exacts_count, 0) >= 3 THEN 15 ELSE 0 END) +
-      (CASE WHEN COALESCE(mp.outcomes_count, 0) >= 15 THEN 10 ELSE 0 END) +
-      (CASE WHEN COALESCE(mp.predictions_count, 0) >= 50 THEN 5 ELSE 0 END) +
+      (CASE WHEN COALESCE(mp.outcomes_count, 0) >= 12 THEN 10 ELSE 0 END) +
+      (CASE WHEN COALESCE(mp.predictions_count, 0) >= 25 THEN 5 ELSE 0 END) +
       (CASE WHEN COALESCE(gp.correct_leaders_count, 0) >= 6 THEN 15 ELSE 0 END) +
       (CASE WHEN COALESCE(prof.badges, ARRAY[]::text[]) @> ARRAY['HAT-TRICK VIP']::text[] THEN 20 ELSE 0 END)
     )
@@ -363,8 +443,8 @@ SELECT
   ARRAY_REMOVE(
     ARRAY[
       CASE WHEN COALESCE(mp.exacts_count, 0) >= 3 THEN 'Ojo Clínico' END,
-      CASE WHEN COALESCE(mp.outcomes_count, 0) >= 15 THEN 'Ganador Frecuente' END,
-      CASE WHEN COALESCE(mp.predictions_count, 0) >= 50 THEN 'Pronosticador Activo' END,
+      CASE WHEN COALESCE(mp.outcomes_count, 0) >= 12 THEN 'Ganador Frecuente' END,
+      CASE WHEN COALESCE(mp.predictions_count, 0) >= 25 THEN 'Pronosticador Activo' END,
       CASE WHEN COALESCE(gp.correct_leaders_count, 0) >= 6 THEN 'Oráculo de Grupos' END,
       CASE WHEN COALESCE(prof.badges, ARRAY[]::text[]) @> ARRAY['HAT-TRICK VIP']::text[] THEN 'HAT-TRICK VIP' END
     ],

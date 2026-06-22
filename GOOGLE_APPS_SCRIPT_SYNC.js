@@ -1,48 +1,70 @@
 /**
- * POLLA MUNDIALISTA — Google Apps Script
+ * POLLA MUNDIALISTA — Google Apps Script (v2 — CORS-SAFE)
  * Módulo M4: Sincronización de usuarios desde la app web hacia Google Sheets
+ *
+ * ⚠️ IMPORTANTE: Este script usa doGet() en lugar de doPost() para evitar
+ *    el bloqueo CORS que ocurre con peticiones POST desde navegadores.
  *
  * INSTRUCCIONES DE DESPLIEGUE (PASO A PASO):
  * ============================================
  * 1. Ve a: https://script.google.com/
- * 2. Crea un nuevo proyecto → ponle nombre: "Polla Mundialista Sync"
- * 3. Borra el contenido del editor y pega TODO este código
+ * 2. Abre el proyecto "Polla Mundialista Sync" (o crea uno nuevo)
+ * 3. Borra TODO el contenido y pega este código completo
  * 4. Reemplaza SPREADSHEET_ID con el ID de tu Google Sheet:
- *    - Abre tu hoja de Google Sheets
- *    - El ID está en la URL: docs.google.com/spreadsheets/d/[ESTE_ES_EL_ID]/edit
- * 5. Haz clic en "Implementar" → "Nueva implementación"
+ *    - Abre tu hoja en Google Sheets
+ *    - La URL será: docs.google.com/spreadsheets/d/[AQUI_ESTÁ_EL_ID]/edit
+ * 5. Haz clic en "Implementar" → "NUEVA implementación" (no editar la existente)
  * 6. Tipo: "Aplicación web"
  * 7. Ejecutar como: "Yo (tu cuenta)"
- * 8. Quién tiene acceso: "Cualquier usuario"
- * 9. Haz clic en "Implementar" → Copia la URL generada
- * 10. Pega esa URL en app.js, reemplazando 'REEMPLAZAR_CON_URL_DEL_APPS_SCRIPT'
+ * 8. Quién tiene acceso: "Cualquier usuario" (Anyone)
+ * 9. Haz clic en "Implementar" → Autoriza los permisos → Copia la URL generada
+ * 10. Pega esa URL NUEVA en app.js en la variable APPS_SCRIPT_URL
  *
  * COLUMNAS EN EL GOOGLE SHEET:
  * A: Cédula | B: Nombre | C: Usuario Parley | D: Correo | E: Teléfono
  * F: F. Nacimiento | G: Puntos | H: Exactos | I: Aciertos 1X2 | J: Insignias | K: Última Sincronización
  */
 
-// 🔧 CONFIGURA TU SPREADSHEET ID AQUÍ:
+// 🔧 CONFIGURA TU SPREADSHEET ID AQUÍ (reemplaza el texto entre comillas):
 const SPREADSHEET_ID = 'REEMPLAZAR_CON_TU_SPREADSHEET_ID';
 const SHEET_NAME = 'Usuarios';
 
 /**
- * Punto de entrada HTTP POST — recibe el sync desde la app
+ * Punto de entrada HTTP GET — recibe el sync desde la app web
+ * Los datos llegan como parámetro "data" codificado en Base64 para evitar CORS.
  */
-function doPost(e) {
+function doGet(e) {
+  // Cabeceras CORS permisivas para cualquier origen
+  const output = ContentService.createTextOutput();
+  output.setMimeType(ContentService.MimeType.JSON);
+
   try {
-    const body = JSON.parse(e.postData.contents);
+    // Los datos vienen codificados en Base64 en el parámetro "data"
+    const encodedData = e.parameter.data;
+    if (!encodedData) {
+      output.setContent(JSON.stringify({ error: 'No data parameter provided' }));
+      return output;
+    }
+
+    // Decodificar Base64 → JSON string → objeto
+    const jsonString = Utilities.newBlob(
+      Utilities.base64Decode(encodedData)
+    ).getDataAsString();
+    const body = JSON.parse(jsonString);
 
     if (body.action !== 'sync' || !Array.isArray(body.users)) {
-      return jsonResponse({ error: 'Payload inválido' }, 400);
+      output.setContent(JSON.stringify({ error: 'Payload inválido' }));
+      return output;
     }
 
     const result = syncUsersToSheet(body.users);
-    return jsonResponse({ success: true, updated: result.updated, inserted: result.inserted });
+    output.setContent(JSON.stringify({ success: true, updated: result.updated, inserted: result.inserted }));
+    return output;
 
   } catch (err) {
-    console.error('Error en doPost:', err);
-    return jsonResponse({ error: err.toString() }, 500);
+    console.error('Error en doGet:', err);
+    output.setContent(JSON.stringify({ error: err.toString() }));
+    return output;
   }
 }
 
@@ -79,29 +101,46 @@ function syncUsersToSheet(users) {
   }
 
   users.forEach(u => {
-    const rowData = [
-      u.cedula || '',
-      u.nombre || '',
-      u.parley_username || '',
-      u.correo || '',
-      u.telefono || '',
-      u.fecha_nacimiento || '',
-      u.puntos || 0,
-      u.exactos || 0,
-      u.aciertos_1x2 || 0,
-      u.insignias || '',
-      now
-    ];
-
     const cedulaKey = (u.cedula || '').toString().trim();
+    let rowData;
 
     if (existingCedulas[cedulaKey]) {
-      // Actualizar fila existente
+      // Actualizar fila existente preservando estadísticas si no vienen en el payload (caso Webhook)
       const rowIndex = existingCedulas[cedulaKey];
+      const existingRowValues = sheet.getRange(rowIndex, 1, 1, 11).getValues()[0];
+
+      rowData = [
+        u.cedula !== undefined ? u.cedula : existingRowValues[0],
+        u.nombre !== undefined ? u.nombre : existingRowValues[1],
+        u.parley_username !== undefined ? u.parley_username : existingRowValues[2],
+        u.correo !== undefined ? u.correo : existingRowValues[3],
+        u.telefono !== undefined ? u.telefono : existingRowValues[4],
+        u.fecha_nacimiento !== undefined ? u.fecha_nacimiento : existingRowValues[5],
+        u.puntos !== undefined ? u.puntos : existingRowValues[6],
+        u.exactos !== undefined ? u.exactos : existingRowValues[7],
+        u.aciertos_1x2 !== undefined ? u.aciertos_1x2 : existingRowValues[8],
+        u.insignias !== undefined ? u.insignias : existingRowValues[9],
+        now
+      ];
+
       sheet.getRange(rowIndex, 1, 1, rowData.length).setValues([rowData]);
       updated++;
     } else {
-      // Insertar nueva fila
+      // Insertar nueva fila (inicializar estadísticas en 0 si no se envían)
+      rowData = [
+        u.cedula || '',
+        u.nombre || '',
+        u.parley_username || '',
+        u.correo || '',
+        u.telefono || '',
+        u.fecha_nacimiento || '',
+        u.puntos !== undefined ? u.puntos : 0,
+        u.exactos !== undefined ? u.exactos : 0,
+        u.aciertos_1x2 !== undefined ? u.aciertos_1x2 : 0,
+        u.insignias !== undefined ? u.insignias : '',
+        now
+      ];
+
       sheet.appendRow(rowData);
       existingCedulas[cedulaKey] = sheet.getLastRow();
       inserted++;
@@ -112,6 +151,102 @@ function syncUsersToSheet(users) {
   sheet.autoResizeColumns(1, 11);
 
   return { updated, inserted };
+}
+
+/**
+ * Punto de entrada HTTP POST — recibe llamadas en tiempo real desde el Webhook de Supabase.
+ * No sufre de CORS porque es una llamada de servidor a servidor.
+ */
+function doPost(e) {
+  const output = ContentService.createTextOutput();
+  output.setMimeType(ContentService.MimeType.JSON);
+
+  try {
+    if (!e || !e.postData || !e.postData.contents) {
+      output.setContent(JSON.stringify({ error: 'No post data received' }));
+      return output;
+    }
+
+    const payload = JSON.parse(e.postData.contents);
+    console.log('Webhook payload received:', JSON.stringify(payload));
+
+    // Validar tabla
+    if (payload.table !== 'profiles') {
+      output.setContent(JSON.stringify({ error: 'Unsupported table: ' + payload.table }));
+      return output;
+    }
+
+    if (payload.type === 'INSERT' || payload.type === 'UPDATE') {
+      const record = payload.record;
+      if (!record) {
+        output.setContent(JSON.stringify({ error: 'No record data found' }));
+        return output;
+      }
+
+      // Evitar sincronizar administradores o usuarios de prueba
+      if (record.is_admin || record.is_mock) {
+        output.setContent(JSON.stringify({ success: true, message: 'Skipped admin/mock user' }));
+        return output;
+      }
+
+      // Mapear campos de 'profiles' a la estructura requerida
+      const user = {
+        cedula: record.cedula,
+        nombre: record.name,
+        parley_username: record.parley_username,
+        correo: record.email,
+        telefono: record.phone,
+        fecha_nacimiento: record.dob
+        // Puntos, exactos, aciertos e insignias quedan undefined para ser preservados
+      };
+
+      const result = syncUsersToSheet([user]);
+      output.setContent(JSON.stringify({ success: true, action: payload.type, result }));
+      return output;
+
+    } else if (payload.type === 'DELETE') {
+      const record = payload.old_record || payload.record;
+      if (record && record.cedula) {
+        const result = deleteUserFromSheet(record.cedula);
+        output.setContent(JSON.stringify({ success: true, action: 'DELETE', result }));
+        return output;
+      }
+      output.setContent(JSON.stringify({ success: true, message: 'DELETE event ignored (no cedula)' }));
+      return output;
+    }
+
+    output.setContent(JSON.stringify({ error: 'Unsupported event type: ' + payload.type }));
+    return output;
+
+  } catch (err) {
+    console.error('Error en doPost:', err);
+    output.setContent(JSON.stringify({ error: err.toString() }));
+    return output;
+  }
+}
+
+/**
+ * Elimina una fila del Google Sheet buscando por cédula
+ */
+function deleteUserFromSheet(cedula) {
+  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  let sheet = ss.getSheetByName(SHEET_NAME);
+  if (!sheet) return { deleted: 0 };
+
+  const lastRow = sheet.getLastRow();
+  if (lastRow <= 1) return { deleted: 0 };
+
+  const cedulaCol = sheet.getRange(2, 1, lastRow - 1, 1).getValues();
+  const cedulaToFind = cedula.toString().trim();
+  
+  for (let i = 0; i < cedulaCol.length; i++) {
+    if (cedulaCol[i][0] && cedulaCol[i][0].toString().trim() === cedulaToFind) {
+      const rowIndex = i + 2; // +2 por índice 1-based y fila de encabezados
+      sheet.deleteRow(rowIndex);
+      return { deleted: 1 };
+    }
+  }
+  return { deleted: 0 };
 }
 
 /**
@@ -141,22 +276,14 @@ function ensureHeaders(sheet) {
 }
 
 /**
- * Respuesta JSON helper
- */
-function jsonResponse(data, statusCode) {
-  return ContentService
-    .createTextOutput(JSON.stringify(data))
-    .setMimeType(ContentService.MimeType.JSON);
-}
-
-/**
- * Test manual — ejecutar desde el editor para probar sin la app
+ * Test manual — ejecutar desde el editor de Apps Script para verificar
+ * que el SPREADSHEET_ID es correcto y tiene acceso
  */
 function testSync() {
   const testUsers = [
     {
       cedula: 'V-12345678',
-      nombre: 'Juan Pérez',
+      nombre: 'Juan Pérez (TEST)',
       parley_username: 'juanperez99',
       correo: 'juan@test.com',
       telefono: '04141234567',
@@ -168,5 +295,5 @@ function testSync() {
     }
   ];
   const result = syncUsersToSheet(testUsers);
-  console.log('Test sync result:', JSON.stringify(result));
+  console.log('✅ Test sync result:', JSON.stringify(result));
 }

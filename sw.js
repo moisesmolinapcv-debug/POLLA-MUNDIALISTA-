@@ -1,4 +1,4 @@
-const CACHE_NAME = 'polla-parley-v10';
+const CACHE_NAME = 'polla-parley-v14';
 const ASSETS = [
   './',
   './index.html',
@@ -6,6 +6,7 @@ const ASSETS = [
   './app.js',
   './supabase-js.js',
   './world_cup_data.js',
+  './qrcode.min.js',
   './manifest.json',
   './Icono Oficial de la App.png'
 ];

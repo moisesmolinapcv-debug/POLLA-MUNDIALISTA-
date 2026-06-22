@@ -84,7 +84,12 @@
       <div class="hero-wrapper" id="logged-out-hero">
         <img src="./LOGO MASTER.png" alt="Logo Master Parley" class="hero-logo-master">
         <p class="hero-subtitle">¡Juega seguro, fácil y rápido con el Parley de Venezuela! Arma tu Polla Mundialista, activa tus comodines y demuestra que <strong>eres el verdadero campeón</strong>.</p>
-        <button class="btn-hero-cta" onclick="openAuthModal('register')"><strong>REGÍSTRATE Y JUEGA YA</strong></button>
+        
+        <div style="display:flex; flex-direction:column; gap:14px; width:100%; max-width:340px; align-items:center; margin-bottom:10px;">
+          <button class="btn-hero-cta" style="width:100%;" onclick="openAuthModal('register')"><strong>REGÍSTRATE Y JUEGA YA</strong></button>
+          <button class="btn-hero-login" style="width:100%;" onclick="openAuthModal('login')"><strong>INICIAR SESIÓN</strong></button>
+        </div>
+
         <!-- PWA Install Button for Android/Chrome -->
         <div id="pwa-install-btn-hero" class="pwa-install-card" style="display:none; margin-top:18px;" onclick="document.getElementById('pwa-install-btn-hero').dispatchEvent(new CustomEvent('pwa-click'))">
           <div class="pwa-install-shimmer"></div>
@@ -102,9 +107,6 @@
         <!-- PWA Install Instructions for iOS/Safari -->
         <div id="pwa-ios-instructions-hero" style="display: none; margin-top: 14px; background: rgba(255, 255, 255, 0.05); padding: 10px; border-radius: var(--radius-sm); border: 1px solid var(--border-sutil); font-size: 12px; color: var(--text-secondary); text-align: center; max-width: 320px; margin-left: auto; margin-right: auto; line-height: 1.4;">
           💡 <strong>Instalar en iPhone:</strong> presiona compartir <span style="font-size: 14px;">📤</span> y selecciona <strong>"Agregar a Inicio"</strong>.
-        </div>
-        <div style="margin-top: 20px; font-size: 13px; color: var(--text-secondary);">
-          ¿Ya tienes cuenta? <a href="#" onclick="openAuthModal('login')" style="color: var(--accent); font-weight:700; text-decoration:none;">Inicia Sesión</a>
         </div>
       </div>
       
@@ -551,8 +553,8 @@
           <input type="text" class="form-input" placeholder="INGRESA NOMBRE Y APELLIDO" id="reg-name" required>
         </div>
         <div class="form-group">
-          <label class="form-label">Nombre de usuario de PARLEY.COM.VE</label>
-          <input type="text" class="form-input" placeholder="INGRESA TU USUARIO DE PARLEY.COM.VE" id="reg-parley-username" required>
+          <label class="form-label">Nombre de usuario de PARLEY.COM.VE (Opcional)</label>
+          <input type="text" class="form-input" placeholder="INGRESA TU USUARIO DE PARLEY.COM.VE" id="reg-parley-username">
           <div style="margin-top: 6px; font-size: 12px; color: var(--text-secondary);">
             ¿No tienes un usuario? <a href="https://parley.com.ve/" target="_blank" style="color: var(--accent); font-weight:700; text-decoration:none;">Regístrate aquí en PARLEY.COM.VE</a>
           </div>
@@ -630,68 +632,161 @@
 
   <!-- INTERACTIVE TUTORIAL MODE ONBOARDING MODAL -->
   <div class="modal-overlay" id="tutorial-modal">
-    <div class="modal-container">
+    <div class="modal-container" style="max-height: 90vh; overflow-y: auto;">
       <div class="tutorial-slider">
         
-        <!-- Slide 1 -->
+        <!-- Slide 1: Competición Global -->
         <div class="tutorial-slide active">
-          <div class="tutorial-icon">🌎</div>
+          <div class="tutorial-icon">🏆</div>
           <h3 class="tutorial-title">COMPETICIÓN GLOBAL</h3>
           <p class="tutorial-desc" style="line-height: 1.6;">
-            ¡Estás en la <strong>Polla Mundialista</strong>! ⚽🔥
+            ¡Te damos la bienvenida a la <strong>Polla Mundialista</strong>! ⚽🔥
             <br><br>
-            Aquí compites contra todo el país en una emocionante tabla general en modalidad <strong>"Todos contra Todos"</strong>.
-            <br><br>
-            ¡Demuestra tus conocimientos en 3 pasos!
-            <br>
-            <br>🎯 <strong>1. Registra tus marcadores:</strong> Pronostica los resultados de cada partido.
-            <br>📈 <strong>2. Suma puntos:</strong> Escala posiciones en la gran tabla clasificatoria.
-            <br>🏆 <strong>3. ¡Conquista el podio!</strong> Enfréntate a los mejores y corónate campeón.
+            Aquí compites contra todo el país en una modalidad única de <strong>"Todos contra Todos"</strong>.
           </p>
+          <div class="tutorial-podium-graphic">
+            <div class="podium-step step-2">
+              <div class="podium-user-avatar">GI</div>
+              <span class="podium-pts">2° Lugar</span>
+            </div>
+            <div class="podium-step step-1">
+              <div class="podium-user-avatar highlight">MA</div>
+              <span class="podium-pts">🏆 Campeón</span>
+            </div>
+            <div class="podium-step step-3">
+              <div class="podium-user-avatar">AL</div>
+              <span class="podium-pts">3° Lugar</span>
+            </div>
+          </div>
+          <p class="tutorial-desc-footer" style="font-size:12px; color:var(--text-secondary); margin-top:16px;">¡Pronostica, acumula puntos y escala hasta la cima del podio nacional!</p>
         </div>
         
-        <!-- Slide 2 -->
+        <!-- Slide 2: Simulador Interactivo -->
         <div class="tutorial-slide">
           <div class="tutorial-icon">📊</div>
-          <h3 class="tutorial-title">DESGLOSE DE PUNTOS</h3>
-          <p class="tutorial-desc" style="line-height: 1.5; font-size: 13px; text-align: left; max-width: 440px; margin: 0 auto;">
-            <strong>📊 ¿Cómo sumar puntos?</strong>
-            <br><br>
-            <strong>🎯 Puntuación Base:</strong>
-            <br>• <strong>Marcador Exacto:</strong> ¡Consigue <strong>+6 PTS</strong>!
-            <br>• <strong>Ganador 1X2:</strong> Suma <strong>+3 PTS</strong> (si no aciertas el marcador exacto).
-            <br>• <strong>Diferencia de Goles:</strong> Suma <strong>+2 PTS</strong> (No aplica en EMPATES).
-            <br><br>
-            <strong>🎖️ Puntos Extra por Insignias:</strong>
-            <br>• ⚡ <strong>Activo:</strong> +5 PTS | 🔄 <strong>Frecuente:</strong> +10 PTS
-            <br>• 🧠 <strong>Clínico:</strong> +15 PTS | 🔮 <strong>Oráculo:</strong> +15 PTS
-            <br>• 🎩 <strong>HAT-TRICK VIP:</strong> +20 PTS
-            <br><br>
-            <strong>🚨 El Multiplicador:</strong>
-            <br>• <strong>Comodines:</strong> Activa hasta 3 comodines de alarma (🚨) para duplicar tus puntos en los partidos que elijas.
+          <h3 class="tutorial-title">SIMULADOR DE PUNTOS</h3>
+          <p class="tutorial-desc" style="margin-bottom: 12px; font-size: 13px;">
+            ¡Aprende las reglas jugando! Selecciona un pronóstico para ver cuántos puntos obtendrías en base al resultado real <strong>España <img src="https://flagcdn.com/w80/es.png" class="flag-svg" style="width: 22px; height: 14px; margin: 0 2px; vertical-align: middle;" alt="España"> 2 - 1 <img src="https://flagcdn.com/w80/de.png" class="flag-svg" style="width: 22px; height: 14px; margin: 0 2px; vertical-align: middle;" alt="Alemania"> Alemania</strong>:
           </p>
+          
+          <!-- Interactive Selector Buttons -->
+          <div class="tutorial-interactive-selectors">
+            <button class="btn-tut-option active" id="tut-opt-exact" onclick="selectTutorialDemoPrediction(2, 1)">2 - 1 (Exacto)</button>
+            <button class="btn-tut-option" id="tut-opt-diff" onclick="selectTutorialDemoPrediction(3, 2)">3 - 2 (Resultado + Dif)</button>
+            <button class="btn-tut-option" id="tut-opt-winner" onclick="selectTutorialDemoPrediction(2, 0)">2 - 0 (Resultado)</button>
+            <button class="btn-tut-option" id="tut-opt-wrong" onclick="selectTutorialDemoPrediction(1, 2)">1 - 2 (Errado)</button>
+          </div>
+          
+          <!-- Mock Match Card -->
+          <div class="tutorial-mock-card">
+            <div class="tut-mock-header">
+              <span class="tut-mock-badge">EJEMPLO DIDÁCTICO</span>
+              <button class="tut-wildcard-btn" id="tut-wildcard-btn" onclick="toggleTutorialWildcard()">
+                <span>🚨 COMODÍN (x2) 👆 (Toca para probar)</span>
+              </button>
+            </div>
+            <div class="tut-mock-grid">
+              <div class="tut-mock-team">
+                <img src="https://flagcdn.com/w80/es.png" class="flag-svg" style="width: 32px; height: 21px; margin-bottom: 4px;" alt="España">
+                <span class="tut-mock-team-name">ESPAÑA</span>
+              </div>
+              <div class="tut-mock-score-display">
+                <div class="tut-mock-score-pred" id="tut-mock-score-pred">2 - 1</div>
+                <div class="tut-mock-score-separator">REAL</div>
+                <div class="tut-mock-score-real">2 - 1</div>
+              </div>
+              <div class="tut-mock-team">
+                <img src="https://flagcdn.com/w80/de.png" class="flag-svg" style="width: 32px; height: 21px; margin-bottom: 4px;" alt="Alemania">
+                <span class="tut-mock-team-name">ALEMANIA</span>
+              </div>
+            </div>
+            <div class="tut-mock-outcome-row">
+              <span class="user-points-badge exact" id="tut-mock-points-badge">⭐ EXACTO (+6 PTS)</span>
+            </div>
+          </div>
         </div>
         
-        <!-- Slide 3 -->
+        <!-- Slide 3: Las Insignias del Torneo -->
+        <div class="tutorial-slide">
+          <div class="tutorial-icon">🏅</div>
+          <h3 class="tutorial-title">INSIGNIAS & COMODINES</h3>
+          <p class="tutorial-desc" style="margin-bottom: 12px; font-size: 13px;">
+            ¡Desbloquea insignias para ganar puntos extra y usa comodines para duplicar tus aciertos!
+          </p>
+          <div class="tutorial-badges-grid">
+            <div class="tutorial-badge-card">
+              <div class="badge-card-icon">⚡</div>
+              <div class="badge-card-info">
+                <div class="badge-card-name">Pronosticador Activo (+5 PTS)</div>
+                <div class="badge-card-req">Rellena 25 o más pronósticos.</div>
+              </div>
+            </div>
+            <div class="tutorial-badge-card">
+              <div class="badge-card-icon">🏆</div>
+              <div class="badge-card-info">
+                <div class="badge-card-name">Ganador Frecuente (+10 PTS)</div>
+                <div class="badge-card-req">Acierta 12 o más ganadores (1X2).</div>
+              </div>
+            </div>
+            <div class="tutorial-badge-card">
+              <div class="badge-card-icon">👁️</div>
+              <div class="badge-card-info">
+                <div class="badge-card-name">Ojo Clínico (+15 PTS)</div>
+                <div class="badge-card-req">Acierta 3 o más marcadores exactos.</div>
+              </div>
+            </div>
+            <div class="tutorial-badge-card">
+              <div class="badge-card-icon">🔮</div>
+              <div class="badge-card-info">
+                <div class="badge-card-name">Oráculo de Grupos (+15 PTS)</div>
+                <div class="badge-card-req">Acierta 6 o más líderes de grupo.</div>
+              </div>
+            </div>
+            <div class="tutorial-badge-card">
+              <div class="badge-card-icon">👑</div>
+              <div class="badge-card-info">
+                <div class="badge-card-name">HAT-TRICK VIP (+20 PTS)</div>
+                <div class="badge-card-req">Insignia especial concedida por mérito.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Slide 4: Reglas y Bloqueos -->
         <div class="tutorial-slide">
           <div class="tutorial-icon">⏳</div>
-          <h3 class="tutorial-title">REGLA DE BLOQUEO</h3>
-          <p class="tutorial-desc">Las predicciones se congelan estrictamente <strong>10 minutos antes</strong> de la hora oficial del pitazo inicial de cada partido. Las predicciones de tus rivales se mantendrán ocultas (🔒 oculto) hasta entonces para evitar el plagio.</p>
-        </div>
-        
-        <!-- Slide 4 -->
-        <div class="tutorial-slide">
-          <div class="tutorial-icon">🔮</div>
-          <h3 class="tutorial-title">EL ORÁCULO DE LOS GRUPOS</h3>
-          <p class="tutorial-desc" style="line-height: 1.5; font-size: 13px; text-align: left; max-width: 440px; margin: 0 auto;">
-            ¿Quién ganará cada grupo? Selecciona el equipo que clasificará en 1ª posición en los grupos A-L.
-            <br><br>
-            🎯 <strong>Reglas de Puntuación:</strong>
-            <br>• Sumas <strong>+5 PTS</strong> por cada líder acertado.
-            <br>• Los puntos se activan al concluir el último partido de cada grupo.
-            <br><br>
-            🔒 <strong>Bloqueo Estricto:</strong> Se cierra el <strong>22 de junio de 2026, 11:00 AM</strong>. ¡No te quedes sin participar!
-          </p>
+          <h3 class="tutorial-title">REGLAS CLAVE</h3>
+          
+          <div class="tutorial-rules-list">
+            <div class="tutorial-rule-item">
+              <div class="rule-icon">🔒</div>
+              <div class="rule-text">
+                <strong>Bloqueo de Partidos:</strong>
+                <span>Los pronósticos se cierran estrictamente <strong>10 minutos antes</strong> del pitazo inicial. Las predicciones del rival permanecen ocultas hasta entonces para evitar plagios.</span>
+              </div>
+            </div>
+            <div class="tutorial-rule-item">
+              <div class="rule-icon">🔮</div>
+              <div class="rule-text">
+                <strong>Líderes de Grupo:</strong>
+                <span>Elige los 12 líderes de grupo en Especiales del Torneo antes del <strong>23 de junio, 12:00 PM</strong>. ¡Consigue <strong>+5 PTS</strong> por cada acierto!</span>
+              </div>
+            </div>
+            <div class="tutorial-rule-item">
+              <div class="rule-icon">👑</div>
+              <div class="rule-text">
+                <strong>Insignia HAT-TRICK VIP (+20 PTS):</strong>
+                <span style="font-size: 12px; line-height: 1.5; color: var(--text-secondary);">
+                  Registra 3 tickets en "Parley VIP" para ganar la insignia:
+                  <ul style="margin: 6px 0 0 16px; padding: 0; list-style-type: disc; display: flex; flex-direction: column; gap: 4px;">
+                    <li><strong>Condición:</strong> Mínimo 3 logros por ticket (solo partidos del Mundial).</li>
+                    <li><strong>Regla de oro:</strong> No repetir partidos entre los 3 tickets.</li>
+                    <li><strong>Validación:</strong> Debes gestionar la validación a través de la ATC de Parley.com.ve.</li>
+                  </ul>
+                </span>
+              </div>
+            </div>
+          </div>
         </div>
         
       </div>
@@ -729,6 +824,18 @@
         
         <div class="vs-header-pts vs-pts-left" id="vs-pts-a">0 PTS</div>
         <div class="vs-header-pts vs-pts-right" id="vs-pts-b">0 PTS</div>
+      </div>
+      
+      <!-- Badges container for both users (ponytail: side-by-side badges comparison) -->
+      <div class="vs-modal-badges-grid" style="flex-shrink:0; display:grid; grid-template-columns: 1fr 40px 1fr; gap:8px 16px; margin-bottom:12px; border-bottom:1px solid var(--border-sutil); padding-bottom:12px;">
+        <div class="vs-badges-left" id="vs-badges-a" style="text-align:right;"></div>
+        <div></div> <!-- Empty center column -->
+        <div class="vs-badges-right" id="vs-badges-b" style="text-align:left;"></div>
+      </div>
+      
+      <!-- Nota de Privacidad Cara a Cara -->
+      <div style="flex-shrink:0; background:rgba(255,215,0,0.05); border:1px solid rgba(255,215,0,0.15); border-radius:8px; padding:10px; font-size:11px; color:var(--text-muted); text-align:center; line-height:1.4; margin-top:12px;">
+        🔒 Los pronósticos del rival se muestran como <strong>OCULTO</strong> y se revelarán automáticamente apenas comience cada partido para garantizar un juego justo.
       </div>
       
       <!-- Parallel predictions list area -->
@@ -1001,6 +1108,7 @@
   
   <!-- Script logic imports -->
   <script src="./world_cup_data.js"></script>
+  <script src="./qrcode.min.js"></script>
   <script src="./app.js"></script>
 </body>
 </html>

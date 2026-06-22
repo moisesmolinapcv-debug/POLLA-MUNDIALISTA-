@@ -1088,6 +1088,7 @@ main {
   display: flex;
   justify-content: center;
   gap: 8px;
+  margin-top: 16px; /* Create separation from the example card */
   margin-bottom: 24px;
 }
 
@@ -1270,6 +1271,10 @@ main {
   flex-direction: column;
   align-items: center;
   text-align: center;
+  position: relative; /* Keep crown positioned relative to the spot to prevent clipping */
+  flex: 1;
+  min-width: 0;
+  max-width: 110px; /* Equal width for all spots to ensure perfect centering and symmetry */
 }
 
 .podium-avatar {
@@ -1287,7 +1292,7 @@ main {
 
 .podium-crown {
   position: absolute;
-  top: -12px;
+  top: -20px; /* Raised from -12px to prevent collision with the gold medal */
   left: 50%;
   transform: translateX(-50%);
   font-size: 16px;
@@ -1585,13 +1590,15 @@ main {
 .vs-grade-tag {
   font-size: 9px;
   font-weight: 800;
-  padding: 2px 6px;
+  padding: 3px 8px;
   border-radius: 4px;
   text-transform: uppercase;
-  margin-top: 2px;
+  margin-top: 4px;
   white-space: nowrap; /* Prevent grade tag text from wrapping on small screens */
   display: inline-flex;
   align-items: center;
+  justify-content: center;
+  text-align: center;
   gap: 3px;
 }
 
@@ -2942,4 +2949,401 @@ h1.hero-title,
   min-height: 28px;
   padding: 0 12px 4px;
   margin-top: 8px; /* ponytail: visually push down status chip away from score inputs */
+}
+
+/* btn-hero-login: Prominent Login Button for Guest View (vibe coding style) */
+.btn-hero-login {
+  background: rgba(255, 215, 0, 0.03);
+  color: var(--accent);
+  font-size: 18px;
+  font-weight: 900;
+  padding: 16px 40px;
+  border-radius: 40px;
+  border: 2px solid var(--accent);
+  cursor: pointer;
+  text-transform: uppercase;
+  box-shadow: 0 4px 15px var(--accent-glow);
+  transition: var(--transition-smooth);
+}
+
+.btn-hero-login:hover {
+  background: var(--accent);
+  color: #0E1626;
+  transform: translateY(-3px) scale(1.02);
+  box-shadow: 0 8px 25px var(--accent-glow);
+}
+
+.btn-hero-login:active {
+  transform: translateY(1px);
+}
+
+/* VS Modal Badges Grid & Chips */
+.vs-badges-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  width: 100%;
+}
+.vs-badges-left .vs-badges-container {
+  justify-content: flex-end;
+}
+.vs-badges-right .vs-badges-container {
+  justify-content: flex-start;
+}
+.vs-badge-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: rgba(255, 215, 0, 0.08);
+  border: 1px solid rgba(255, 215, 0, 0.25);
+  color: var(--accent);
+  border-radius: 12px;
+  padding: 3px 8px;
+  font-size: 10px;
+  font-weight: 700;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+  transition: var(--transition-smooth);
+}
+.vs-badge-chip:hover {
+  transform: scale(1.05);
+  background: rgba(255, 215, 0, 0.15);
+}
+
+/* Points Pulse animation for real-time update visual feedback */
+@keyframes pointsPulse {
+  0% { transform: scale(1); filter: brightness(1); }
+  50% { transform: scale(1.15); filter: brightness(1.4); text-shadow: 0 0 12px var(--accent); }
+  100% { transform: scale(1); filter: brightness(1); }
+}
+.animate-pulse-points {
+  display: inline-block;
+  animation: pointsPulse 0.8s ease-in-out;
+}
+
+/* User Points Badge for matches (Mis Pronósticos) */
+.user-points-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  transition: var(--transition-smooth);
+}
+.user-points-badge.exact {
+  background: rgba(255, 215, 0, 0.12);
+  border: 1px solid rgba(255, 215, 0, 0.4);
+  color: var(--accent);
+  box-shadow: 0 0 10px rgba(255, 215, 0, 0.15);
+}
+.user-points-badge.correct {
+  background: rgba(16, 185, 129, 0.12);
+  border: 1px solid rgba(16, 185, 129, 0.4);
+  color: #10B981;
+}
+.user-points-badge.wrong {
+  background: rgba(239, 68, 68, 0.12);
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  color: #EF4444;
+}
+.user-points-badge.pending {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: var(--text-secondary);
+}
+
+/* Special predictions group leader badges */
+.special-points-badge {
+  display: block;
+  font-size: 10px;
+  font-weight: 800;
+  margin-top: 4px;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+.special-points-badge.exact {
+  color: var(--accent);
+}
+.special-points-badge.wrong {
+  color: #EF4444;
+}
+.special-points-badge.pending {
+  color: var(--text-secondary);
+}
+.special-points-sub {
+  font-size: 8.5px;
+  font-weight: 500;
+  text-transform: capitalize;
+  opacity: 0.85;
+  margin-top: 1px;
+}
+
+/* Slide 1 Podium Graphic */
+.tutorial-podium-graphic {
+  display: flex;
+  justify-content: center;
+  align-items: flex-end;
+  gap: 16px;
+  margin: 20px auto;
+  height: 120px;
+  max-width: 320px;
+}
+.podium-step {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  border-radius: 8px 8px 0 0;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.02) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-bottom: none;
+  padding: 10px 4px 6px;
+  position: relative;
+}
+.podium-step.step-1 {
+  height: 90px;
+  background: linear-gradient(180deg, rgba(255, 223, 0, 0.15) 0%, rgba(255, 223, 0, 0.03) 100%);
+  border-color: rgba(255, 223, 0, 0.35);
+}
+.podium-step.step-2 {
+  height: 70px;
+}
+.podium-step.step-3 {
+  height: 55px;
+}
+.podium-user-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--bg-secondary);
+  border: 2px solid var(--border-sutil);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  font-size: 12px;
+  color: var(--text-primary);
+  margin-bottom: 6px;
+}
+.podium-user-avatar.highlight {
+  border-color: var(--accent);
+  box-shadow: 0 0 10px var(--accent-glow);
+}
+.podium-pts {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-secondary);
+}
+.podium-step.step-1 .podium-pts {
+  color: var(--accent);
+}
+
+/* Slide 2 Interactive Simulator */
+.tutorial-interactive-selectors {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+.btn-tut-option {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border-sutil);
+  color: var(--text-primary);
+  padding: 6px 12px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: var(--transition-smooth);
+}
+.btn-tut-option:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+.btn-tut-option.active {
+  background: var(--accent);
+  color: #0E1626;
+  border-color: var(--accent);
+  box-shadow: 0 0 10px var(--accent-glow);
+}
+.tutorial-mock-card {
+  background: rgba(19, 34, 63, 0.4);
+  border: 1px solid rgba(255, 223, 0, 0.2);
+  border-radius: var(--radius-md);
+  padding: 12px;
+  max-width: 380px;
+  margin: 0 auto 20px; /* Added 20px bottom margin to push dots down */
+  box-shadow: var(--shadow-premium);
+}
+.tut-mock-header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+  border-bottom: 1px solid var(--border-sutil);
+  padding-bottom: 8px;
+}
+.tut-mock-badge {
+  font-size: 9px;
+  font-weight: 800;
+  color: var(--accent);
+  letter-spacing: 0.05em;
+}
+.tut-wildcard-btn {
+  background: rgba(239, 68, 68, 0.12);
+  border: 1px solid rgba(239, 68, 68, 0.35);
+  color: #EF4444;
+  padding: 3px 8px;
+  border-radius: 12px;
+  font-size: 9px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: var(--transition-smooth);
+}
+.tut-wildcard-btn.active {
+  background: #EF4444;
+  color: #FFFFFF;
+  border-color: #EF4444;
+  box-shadow: 0 0 10px rgba(239, 68, 68, 0.4);
+}
+.tut-mock-grid {
+  display: grid;
+  grid-template-columns: 1fr 1.2fr 1fr;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.tut-mock-team {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+.tut-mock-flag {
+  font-size: 24px;
+}
+.tut-mock-team-name {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  color: var(--text-primary);
+}
+.tut-mock-score-display {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.tut-mock-score-pred {
+  font-size: 22px;
+  font-weight: 900;
+  color: var(--accent);
+  line-height: 1.1;
+}
+.tut-mock-score-separator {
+  font-size: 8px;
+  color: var(--text-muted);
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  margin: 2px 0;
+}
+.tut-mock-score-real {
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--text-secondary);
+}
+.tut-mock-outcome-row {
+  display: flex;
+  justify-content: center;
+  padding-top: 4px;
+}
+
+/* Slide 3 Badges Grid */
+.tutorial-badges-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 440px;
+  margin: 0 auto;
+  text-align: left;
+}
+.tutorial-badge-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border-sutil);
+  border-radius: var(--radius-md);
+  padding: 8px 12px;
+  transition: var(--transition-smooth);
+}
+.tutorial-badge-card:hover {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 223, 0, 0.25);
+  transform: translateX(4px);
+}
+.badge-card-icon {
+  font-size: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: rgba(255, 215, 0, 0.06);
+  border: 1px solid rgba(255, 215, 0, 0.2);
+  flex-shrink: 0;
+}
+.badge-card-info {
+  display: flex;
+  flex-direction: column;
+}
+.badge-card-name {
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--accent);
+}
+.badge-card-req {
+  font-size: 10px;
+  color: var(--text-secondary);
+}
+
+/* Slide 4 Key Rules */
+.tutorial-rules-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-width: 440px;
+  margin: 16px auto 0;
+  text-align: left;
+}
+.tutorial-rule-item {
+  display: flex;
+  gap: 14px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--border-sutil);
+  border-radius: var(--radius-md);
+  padding: 14px;
+}
+.rule-icon {
+  font-size: 24px;
+  flex-shrink: 0;
+}
+.rule-text {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.rule-text strong {
+  font-size: 13px;
+  color: var(--accent);
+}
+.rule-text span {
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.5;
 }

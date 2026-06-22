@@ -65,7 +65,7 @@ function getFlagCode(countryName) {
   return mapping[normalized] || "un";
 }
 
-// Generate the HTML for a flag using FlagCDN PNG and fallback handler
+// Generate the HTML for a flag using remote assets and fallback handler
 function getFlagHTML(countryName) {
   const code = getFlagCode(countryName);
   const url = `https://flagcdn.com/w80/${code}.png`;
@@ -148,6 +148,9 @@ async function openAdminUserModal(cedula) {
       return;
     }
   }
+  
+  // ponytail: ensure user's calculations are fully populated locally for breakdown rendering
+  recalculateAllPoints();
   
   document.getElementById('admin-inspect-name').innerText = user.name;
   document.getElementById('admin-inspect-id').innerText = user.id;
@@ -666,11 +669,12 @@ async function loadUserData(userId) {
   };
 
   // Parallelize the queries inside loadUserData() using Promise.all
-  const [profileResult, predsResult, glPredsResult, rankResult] = await Promise.all([
+  const [profileResult, predsResult, glPredsResult, rankResult, statsResult] = await Promise.all([
     fetchProfileWithRetry(),
     supabaseClient.from('predictions').select('*').eq('user_id', userId),
     supabaseClient.from('group_leader_predictions').select('*').eq('user_id', userId),
-    supabaseClient.from('leaderboard').select('rank, total_points').eq('user_id', userId).maybeSingle()
+    supabaseClient.from('leaderboard').select('rank, total_points').eq('user_id', userId).maybeSingle(),
+    supabaseClient.from('user_calculated_points').select('calculated_badges, total_points').eq('user_id', userId).maybeSingle()
   ]);
 
   if (profileResult.error) {
@@ -694,6 +698,14 @@ async function loadUserData(userId) {
     }
     profile.rank = '-';
     profile.points = 0;
+  }
+  
+  // ponytail: Hydrate calculated badges and points from view to prevent visual delay
+  if (statsResult && statsResult.data) {
+    profile.badges = statsResult.data.calculated_badges || [];
+    profile.points = statsResult.data.total_points;
+  } else {
+    profile.badges = profile.badges || [];
   }
   
   profile.predictions = {};
@@ -988,6 +1000,8 @@ async function syncFromSupabase() {
   try {
     currentSyncPromise = doSync();
     await currentSyncPromise;
+    // ponytail: run local calculations to synchronize stats and badges across all client states
+    recalculateAllPoints();
   } finally {
     currentSyncPromise = null;
     pendingSyncRequest = false;
@@ -1016,8 +1030,22 @@ async function initDatabase() {
             if (profile) {
               STATE.currentUser = profile;
               STATE.adminMode = profile.is_admin || profile.cedula === 'V-12345678';
+              recalculateAllPoints(); // Recalculate local stats immediately
               renderApp();
               checkOnboardingTutorial();
+              
+              // ponytail: Auto push notifications prompt only if just registered
+              const justRegistered = sessionStorage.getItem('just_registered_user') === 'true';
+              if (justRegistered) {
+                sessionStorage.removeItem('just_registered_user');
+                try {
+                  const toggleEl = document.getElementById('push-notifications-toggle');
+                  if (toggleEl) toggleEl.checked = true;
+                  togglePushNotifications(true);
+                } catch (e) {
+                  console.error("Auto push activation failed on auth change:", e);
+                }
+              }
             }
           } catch (err) {
             console.error("Error loading user profile on auth state change", err);
@@ -1077,9 +1105,10 @@ function recalculateAllPoints() {
       
       // Only calculate if scores are filled (not null)
       if (H_p === null || H_p === undefined || A_p === null || A_p === undefined) return;
-      if (match.home_score === null || match.home_score === undefined || match.away_score === null || match.away_score === undefined) return;
       
       predictionsCount++;
+      
+      if (match.home_score === null || match.home_score === undefined || match.away_score === null || match.away_score === undefined) return;
       
       const H_r = match.home_score;
       const A_r = match.away_score;
@@ -1148,8 +1177,8 @@ function recalculateAllPoints() {
     // D. Gamification badges
     let badges = [];
     if (exactsCount >= 3) badges.push("Ojo Clínico");
-    if (winnerCount >= 15) badges.push("Ganador Frecuente");
-    if (predictionsCount >= 50) badges.push("Pronosticador Activo");
+    if (winnerCount >= 12) badges.push("Ganador Frecuente");
+    if (predictionsCount >= 25) badges.push("Pronosticador Activo");
     
     // Check for Group Leader badge (6+ correct)
     const leaderAciertos = breakdown.group_leaders_points / 5;
@@ -1176,14 +1205,31 @@ function recalculateAllPoints() {
     totalPoints += badgePoints;
     breakdown.badges_points = badgePoints;
     
-    user.points = totalPoints;
-    user.points_breakdown = breakdown;
-    user.badges = badges;
-    user.exacts_count = exactsCount;
-    user.outcomes_count = winnerCount - exactsCount;
-    user.successful_wildcards_count = successfulWildcardsCount;
+    // ponytail: Only overwrite points/badges for currentUser, mock users, or if current user is admin.
+    // This prevents overriding real user points/badges with local partial calculations due to RLS.
+    const isAdmin = STATE.currentUser && STATE.currentUser.is_admin;
+    if (isCurrentUser || user.is_mock || isAdmin) {
+      user.points = totalPoints;
+      user.points_breakdown = breakdown;
+      user.badges = badges;
+      user.exacts_count = exactsCount;
+      // ponytail: align with database outcomes_count definition (total correct outcomes)
+      user.outcomes_count = winnerCount;
+      user.successful_wildcards_count = successfulWildcardsCount;
+    }
   });
   
+  // Sincronizar el puntaje calculado con el objeto del usuario activo (cintillo superior)
+  if (STATE.currentUser) {
+    const calcUser = STATE.users.find(u => u.cedula === STATE.currentUser.cedula);
+    if (calcUser) {
+      STATE.currentUser.points = calcUser.points;
+      STATE.currentUser.badges = calcUser.badges;
+    }
+    
+    // Forzar actualización inmediata del cintillo superior en el DOM con animación
+    updatePointsWithAnimation('header-points-value', STATE.currentUser.points);
+  }
 }
 
 function sortUsersLeaderboard(usersArray) {
@@ -1192,9 +1238,12 @@ function sortUsersLeaderboard(usersArray) {
     const exactsA = a.exacts_count || 0;
     const exactsB = b.exacts_count || 0;
     if (exactsB !== exactsA) return exactsB - exactsA;
-    const outcomesA = a.outcomes_count || 0;
-    const outcomesB = b.outcomes_count || 0;
-    if (outcomesB !== outcomesA) return outcomesB - outcomesA;
+    
+    // Sort by non-exact outcomes (total outcomes minus exact outcomes)
+    const nonExactsA = (a.outcomes_count || 0) - exactsA;
+    const nonExactsB = (b.outcomes_count || 0) - exactsB;
+    if (nonExactsB !== nonExactsA) return nonExactsB - nonExactsA;
+    
     const wcsA = a.successful_wildcards_count || 0;
     const wcsB = b.successful_wildcards_count || 0;
     if (wcsB !== wcsA) return wcsB - wcsA;
@@ -1267,8 +1316,8 @@ function calculateGroupStandings(matchesList) {
       if (b.pts !== a.pts) return b.pts - a.pts;
       if (b.gd !== a.gd) return b.gd - a.gd;
       if (b.gf !== a.gf) return b.gf - a.gf;
-      // fallback: alphabetical
-      return a.name.localeCompare(b.name);
+      // fallback: alphabetical by team code (id)
+      return a.id.localeCompare(b.id);
     });
 
     // Apply manual group overrides if present
@@ -1336,7 +1385,7 @@ function isMatchLocked(match) {
 
 // Check if the tournament specials are locked
 function isSpecialPredictionsLocked() {
-  const deadlineMs = new Date("2026-06-22T11:00:00-04:00").getTime();
+  const deadlineMs = new Date("2026-06-23T12:00:00-04:00").getTime();
   return getCurrentTime() >= deadlineMs;
 }
 
@@ -1477,6 +1526,13 @@ async function saveUserPrediction(matchNo, homeScoreVal, awayScoreVal) {
     return;
   }
   
+  // Restrict to match range #41 to #72 for non-admin users
+  const isAdminUser = STATE.currentUser && STATE.currentUser.is_admin;
+  if (!isAdminUser && (matchNo < 41 || matchNo > 72)) {
+    showToast("ESTE PARTIDO NO ESTÁ DISPONIBLE PARA PRONÓSTICOS.", "error");
+    return;
+  }
+  
   // Format inputs
   if (homeScoreVal === "" || awayScoreVal === "") {
     // Silently return since user is in the middle of entering the scores
@@ -1514,6 +1570,8 @@ async function saveUserPrediction(matchNo, homeScoreVal, awayScoreVal) {
     const queued = await queueOfflinePrediction(predData);
     if (queued) {
       triggerSaveVisualFeedback(matchNo);
+      recalculateAllPoints();
+      renderApp();
       showToast("PRONÓSTICO GUARDADO OFFLINE (SE SINCRONIZARÁ AL VOLVER A LA RED). 📡");
     } else {
       showToast("ERROR AL GUARDAR EL PRONÓSTICO LOCALMENTE.", "error");
@@ -1540,6 +1598,8 @@ async function saveUserPrediction(matchNo, homeScoreVal, awayScoreVal) {
     if (error) throw error;
     
     triggerSaveVisualFeedback(matchNo);
+    recalculateAllPoints();
+    renderApp();
   } catch (err) {
     console.warn("Supabase upsert failed silently, falling back to IndexedDB local queue:", err);
     const predData = {
@@ -1551,6 +1611,8 @@ async function saveUserPrediction(matchNo, homeScoreVal, awayScoreVal) {
     };
     await queueOfflinePrediction(predData);
     triggerSaveVisualFeedback(matchNo);
+    recalculateAllPoints();
+    renderApp();
   }
 }
 
@@ -1604,6 +1666,13 @@ async function toggleWildcard(matchNo) {
   const targetMatch = STATE.matches.find(m => m.match_no === matchNo);
   if (isMatchLocked(targetMatch)) {
     showToast("NO PUEDES CAMBIAR EL COMODÍN DE UN PARTIDO BLOQUEADO.", "error");
+    return;
+  }
+  
+  // Restrict to match range #41 to #72 for non-admin users
+  const isAdminUser = STATE.currentUser && STATE.currentUser.is_admin;
+  if (!isAdminUser && (matchNo < 41 || matchNo > 72)) {
+    showToast("ESTE PARTIDO NO ESTÁ DISPONIBLE PARA EL COMODÍN.", "error");
     return;
   }
   
@@ -1661,6 +1730,7 @@ async function toggleWildcard(matchNo) {
     };
     const queued = await queueOfflinePrediction(predData);
     if (queued) {
+      recalculateAllPoints();
       renderApp();
       renderMatchesView();
       showToast("COMODÍN GUARDADO OFFLINE (SE SINCRONIZARÁ AL VOLVER A LA RED). 📡");
@@ -1688,6 +1758,7 @@ async function toggleWildcard(matchNo) {
       
     if (error) throw error;
     
+    recalculateAllPoints();
     renderApp();
     renderMatchesView();
   } catch (err) {
@@ -1700,6 +1771,7 @@ async function toggleWildcard(matchNo) {
       wildcard: STATE.currentUser.predictions[matchNo].wildcard
     };
     await queueOfflinePrediction(predData);
+    recalculateAllPoints();
     renderApp();
     renderMatchesView();
   }
@@ -1740,6 +1812,7 @@ async function saveTournamentSpecials(type, val, key = null) {
         
       if (error) throw error;
       
+      recalculateAllPoints();
       renderApp();
       showToast("PREDICCIONES DE TORNEO ACTUALIZADAS.");
     } catch (err) {
@@ -1870,18 +1943,13 @@ let tempRecoveryData = null;async function handleRegister() {
   const cedula = formatCedulaInput(prefix, num);
   
   // Validations
-  if (!nameVal.trim() || !parleyUserVal.trim() || !num.trim() || !dobVal.trim() || !emailVal.trim() || !phoneVal.trim() || !passVal || !passConfVal) {
+  if (!nameVal.trim() || !num.trim() || !dobVal.trim() || !emailVal.trim() || !phoneVal.trim() || !passVal || !passConfVal) {
     showToast("TODOS LOS CAMPOS DEL REGISTRO SON OBLIGATORIOS Y DEBEN COMPLETARSE.", "error");
     return;
   }
   
   if (!nameVal.trim()) {
     showToast("EL NOMBRE COMPLETO ES REQUERIDO.", "error");
-    return;
-  }
-  
-  if (!parleyUserVal.trim()) {
-    showToast("EL USUARIO DE PARLEY.COM.VE ES REQUERIDO.", "error");
     return;
   }
   
@@ -1937,10 +2005,15 @@ let tempRecoveryData = null;async function handleRegister() {
   
   try {
     // 1. Verificación preventiva de datos duplicados en profiles
+    let orFilter = `cedula.eq."${cedula}",email.eq."${emailClean}",phone.eq."${phoneClean}"`;
+    if (parleyUserVal.trim()) {
+      orFilter += `,parley_username.eq."${parleyUserVal.trim()}"`;
+    }
+    
     const { data: duplicateUsers, error: checkError } = await supabaseClient
       .from('profiles')
       .select('cedula, email, phone, parley_username')
-      .or(`cedula.eq."${cedula}",email.eq."${emailClean}",phone.eq."${phoneClean}",parley_username.eq."${parleyUserVal.trim()}"`);
+      .or(orFilter);
       
     if (checkError) {
       console.error("Error checking for duplicate profile details:", checkError);
@@ -1960,11 +2033,14 @@ let tempRecoveryData = null;async function handleRegister() {
         showToast("⚠️ EL NÚMERO DE TELÉFONO YA SE ENCUENTRA REGISTRADO.", "error");
         return;
       }
-      if (dupe.parley_username && dupe.parley_username.toLowerCase() === parleyUserVal.trim().toLowerCase()) {
+      if (parleyUserVal.trim() && dupe.parley_username && dupe.parley_username.toLowerCase() === parleyUserVal.trim().toLowerCase()) {
         showToast("⚠️ EL NOMBRE DE USUARIO DE PARLEY.COM.VE YA SE ENCUENTRA REGISTRADO.", "error");
         return;
       }
     }
+
+    // ponytail: Set registration flag in sessionStorage to prompt push permission only on first login session
+    sessionStorage.setItem('just_registered_user', 'true');
 
     // 2. Register in Supabase Auth (Postgres trigger on_auth_user_created will insert public.profiles row automatically)
     const { data: authData, error: authError } = await supabaseClient.auth.signUp({
@@ -1974,7 +2050,7 @@ let tempRecoveryData = null;async function handleRegister() {
         data: {
           name: nameVal.trim(),
           cedula: cedula,
-          parley_username: parleyUserVal.trim(),
+          parley_username: parleyUserVal.trim() || null,
           phone: phoneClean,
           dob: dobVal
         }
@@ -2100,6 +2176,19 @@ async function handleLogin(cedulaPrefix, cedulaNum, password) {
     closeAuthModal();
     renderApp();
     
+    // ponytail: Auto push notifications prompt only if just registered
+    const justRegistered = sessionStorage.getItem('just_registered_user') === 'true';
+    if (justRegistered) {
+      sessionStorage.removeItem('just_registered_user');
+      try {
+        const toggleEl = document.getElementById('push-notifications-toggle');
+        if (toggleEl) toggleEl.checked = true;
+        await togglePushNotifications(true);
+      } catch (e) {
+        console.error("Auto push activation failed on login:", e);
+      }
+    }
+    
     // 4. Check if user must change password (reset by admin)
     if (STATE.currentUser && STATE.currentUser.must_change_password) {
       showForcedPasswordChangeOverlay();
@@ -2149,14 +2238,19 @@ async function handleLogout() {
 
 // Share app content natively or via clipboard copy fallback
 function shareApp() {
+  const shareUrl = window.location.origin + window.location.pathname;
   const shareData = {
-    title: 'Polla Mundial 2026',
-    text: '¡Únete a la Polla Mundialista 2026 de Parley, pronostica los partidos y sube al podio de campeones! ⚽🏆',
-    url: window.location.origin + window.location.pathname
+    title: 'Polla Mundialista Parley',
+    text: '🔥 ¡Llegó la Polla Mundialista de Parley! Demuestra tu conocimiento, arma tus pronósticos gratis y compite por premios espectaculares. ¿Estás listo para subir al podio? 👉 ¡Juega ahora! ⚽🏆',
+    url: shareUrl
   };
 
   if (navigator.share) {
-    navigator.share(shareData)
+    navigator.share({
+      title: shareData.title,
+      text: `${shareData.text} ${shareUrl}`,
+      url: shareUrl
+    })
       .then(() => showToast("¡QUINIELA COMPARTIDA EXITOSAMENTE!"))
       .catch(err => {
         if (err && err.name === 'AbortError') return;
@@ -2166,8 +2260,8 @@ function shareApp() {
     // Fallback: Copy link to clipboard
     try {
       if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
-        navigator.clipboard.writeText(shareData.url)
-          .then(() => showToast("¡ENLACE DE LA QUINIELA COPIADO AL PORTAPAPELES!"))
+        navigator.clipboard.writeText(`${shareData.text} ${shareUrl}`)
+          .then(() => showToast("¡MENSAJE Y ENLACE DE LA QUINIELA COPIADO!"))
           .catch(err => showToast("ERROR AL COPIAR EL ENLACE.", "error"));
       } else {
         showToast("COMPARTIR NO COMPATIBLE EN ESTE NAVEGADOR.", "error");
@@ -2221,6 +2315,7 @@ function openTicketModal(user) {
   container.innerHTML = "";
   
   STATE.matches.forEach(m => {
+    if (m.match_no < 41 || m.match_no > 72) return;
     const pred = user.predictions[m.match_no];
     let predText = "Sin pronóstico";
     let wildcardHTML = "";
@@ -2295,12 +2390,24 @@ async function shareUserTicket() {
     
     const hash = btoa(user.cedula);
     const shareUrl = `${window.location.origin}${window.location.pathname}?ticket=${hash}`;
-    const qrCodeSrc = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(shareUrl)}`;
     
-    const [logoImg, parleyLogoImg, qrImg, bannerImg] = await Promise.all([
+    // Generate QR code locally (PWA offline readiness) with maximum resolution
+    const qrContainer = document.createElement('div');
+    qrContainer.style.display = 'none';
+    document.body.appendChild(qrContainer);
+    
+    new QRCode(qrContainer, {
+      text: shareUrl,
+      width: 256,
+      height: 256,
+      correctLevel: QRCode.CorrectLevel.H
+    });
+    
+    const qrCanvas = qrContainer.querySelector('canvas');
+    
+    const [logoImg, parleyLogoImg, bannerImg] = await Promise.all([
       loadImage(logoSrc),
       loadImage(parleyLogoSrc),
-      loadImage(qrCodeSrc),
       loadImage(bannerSrc)
     ]);
 
@@ -2311,26 +2418,26 @@ async function shareUserTicket() {
     const day = String(simDate.getDate()).padStart(2, '0');
     const simDateStr = `${year}-${month}-${day}`; // "YYYY-MM-DD"
 
-    // Get ALL matches of simulated today
-    let matchesToShow = STATE.matches.filter(m => m.date.startsWith(simDateStr));
+    // Get ALL matches of simulated today in range [41, 72]
+    let matchesToShow = STATE.matches.filter(m => m.date.startsWith(simDateStr) && m.match_no >= 41 && m.match_no <= 72);
     let targetDayStr = simDateStr;
 
     if (matchesToShow.length === 0) {
-      // Find nearest future date with matches
-      const futureMatches = STATE.matches.filter(m => m.date.split(' ')[0] > simDateStr);
+      // Find nearest future date with matches in range [41, 72]
+      const futureMatches = STATE.matches.filter(m => m.date.split(' ')[0] > simDateStr && m.match_no >= 41 && m.match_no <= 72);
       if (futureMatches.length > 0) {
         const sortedFuture = [...futureMatches].sort((a, b) => a.date.localeCompare(b.date));
         targetDayStr = sortedFuture[0].date.split(' ')[0];
-        matchesToShow = STATE.matches.filter(m => m.date.startsWith(targetDayStr));
+        matchesToShow = STATE.matches.filter(m => m.date.startsWith(targetDayStr) && m.match_no >= 41 && m.match_no <= 72);
       }
     }
 
-    // Fallback if still empty
+    // Fallback if still empty in range [41, 72]
     if (matchesToShow.length === 0) {
-      const sortedMatches = [...STATE.matches].sort((a, b) => a.date.localeCompare(b.date));
+      const sortedMatches = STATE.matches.filter(m => m.match_no >= 41 && m.match_no <= 72).sort((a, b) => a.date.localeCompare(b.date));
       if (sortedMatches.length > 0) {
         targetDayStr = sortedMatches[sortedMatches.length - 1].date.split(' ')[0];
-        matchesToShow = STATE.matches.filter(m => m.date.startsWith(targetDayStr));
+        matchesToShow = STATE.matches.filter(m => m.date.startsWith(targetDayStr) && m.match_no >= 41 && m.match_no <= 72);
       }
     }
 
@@ -2600,9 +2707,10 @@ async function shareUserTicket() {
     ctx.fillStyle = '#FFFFFF';
     ctx.fill();
     
-    if (qrImg) {
-      ctx.drawImage(qrImg, 635, footerY + 30, 120, 120);
+    if (qrCanvas) {
+      ctx.drawImage(qrCanvas, 635, footerY + 30, 120, 120);
     }
+    document.body.removeChild(qrContainer);
     
     ctx.textAlign = 'center';
     ctx.fillStyle = '#FFDF00';
@@ -2624,7 +2732,7 @@ async function shareUserTicket() {
         navigator.share({
           files: [file],
           title: `Mi Ticket - ${user.name}`,
-          text: `⚽ ¡Mira mi ticket de pronósticos para el Mundial! Llevo acumulados ${user.points} PTS. ¿Crees que puedes superarme? ¡Juega gratis en Polla Mundialista!🏆 `
+          text: `🔥 ¡El Mundial se vive al límite! Llevo ${user.points} PTS acumulados en la Polla Mundialista de Parley. ¿Crees poder superar mi ticket? 🧠⚽ Entra gratis y arma tu jugada. 👉 ${shareUrl}`
         }).then(() => {
           showToast("¡IMAGEN DEL TICKET COMPARTIDA! 🚀");
         }).catch((err) => {
@@ -2642,7 +2750,7 @@ async function shareUserTicket() {
     
     const hash = btoa(user.cedula);
     const shareUrl = `${window.location.origin}${window.location.pathname}?ticket=${hash}`;
-    copyTextToClipboard(shareUrl, `⚽ ¡Mira mi ticket de pronósticos para el Mundial! Llevo acumulados ${user.points} PTS.`);
+    copyTextToClipboard(shareUrl, `🔥 ¡El Mundial se vive al límite! Llevo ${user.points} PTS acumulados en la Polla Mundialista de Parley. ¿Crees poder superar mi ticket? 🧠⚽ Entra gratis y arma tu jugada. 👉 ${shareUrl}`);
   }
 }
 
@@ -2785,9 +2893,94 @@ function checkOnboardingTutorial() {
   }
 }
 
+// Interactive tutorial states
+let tutorialDemoPredHome = 2;
+let tutorialDemoPredAway = 1;
+let tutorialDemoWildcard = false;
+
 function openTutorialModal() {
   document.getElementById('tutorial-modal').classList.add('active');
+  
+  // Reset tutorial interactive demo variables to default on open
+  tutorialDemoPredHome = 2;
+  tutorialDemoPredAway = 1;
+  tutorialDemoWildcard = false;
+  
+  // Reset buttons classes
+  const buttons = document.querySelectorAll('.tutorial-interactive-selectors .btn-tut-option');
+  buttons.forEach(btn => btn.classList.remove('active'));
+  const btnExact = document.getElementById('tut-opt-exact');
+  if (btnExact) btnExact.classList.add('active');
+  
+  const wbtn = document.getElementById('tut-wildcard-btn');
+  if (wbtn) wbtn.classList.remove('active');
+  
+  updateTutorialDemoUI();
   showTutorialSlide(0);
+}
+
+function selectTutorialDemoPrediction(home, away) {
+  tutorialDemoPredHome = home;
+  tutorialDemoPredAway = away;
+  
+  // Highlight active button
+  const buttons = document.querySelectorAll('.tutorial-interactive-selectors .btn-tut-option');
+  buttons.forEach(btn => btn.classList.remove('active'));
+  
+  if (home === 2 && away === 1) {
+    const btn = document.getElementById('tut-opt-exact');
+    if (btn) btn.classList.add('active');
+  } else if (home === 3 && away === 2) {
+    const btn = document.getElementById('tut-opt-diff');
+    if (btn) btn.classList.add('active');
+  } else if (home === 2 && away === 0) {
+    const btn = document.getElementById('tut-opt-winner');
+    if (btn) btn.classList.add('active');
+  } else if (home === 1 && away === 2) {
+    const btn = document.getElementById('tut-opt-wrong');
+    if (btn) btn.classList.add('active');
+  }
+  
+  updateTutorialDemoUI();
+}
+
+function toggleTutorialWildcard() {
+  tutorialDemoWildcard = !tutorialDemoWildcard;
+  const btn = document.getElementById('tut-wildcard-btn');
+  if (btn) {
+    if (tutorialDemoWildcard) {
+      btn.classList.add('active');
+    } else {
+      btn.classList.remove('active');
+    }
+  }
+  updateTutorialDemoUI();
+}
+
+function updateTutorialDemoUI() {
+  // Update prediction text
+  const predScoreText = document.getElementById('tut-mock-score-pred');
+  if (predScoreText) {
+    predScoreText.innerHTML = `${tutorialDemoPredHome} - ${tutorialDemoPredAway}${tutorialDemoWildcard ? ' <span class="vs-wildcard-star">🚨</span>' : ''}`;
+  }
+  
+  // Calculate points
+  const match = { home_score: 2, away_score: 1 };
+  const pred = {
+    home_score: tutorialDemoPredHome,
+    away_score: tutorialDemoPredAway,
+    wildcard: tutorialDemoWildcard
+  };
+  
+  // Re-use gradePrediction logic
+  const grade = gradePrediction(pred, match);
+  
+  // Update badge class and text
+  const badge = document.getElementById('tut-mock-points-badge');
+  if (badge) {
+    badge.className = `user-points-badge ${grade.class}`;
+    badge.innerText = grade.text;
+  }
 }
 
 function closeTutorialModal() {
@@ -2865,6 +3058,10 @@ function gradePrediction(pred, match) {
   if (isExact) {
     return { class: "exact", text: `⭐ EXACTO (+${earned})` };
   } else if (earned > 0) {
+    // ponytail: Format 5 or 10 points correct outcomes with correct GD specifically
+    if ((earned === 5 || earned === 10) && H_r !== A_r && (H_r - A_r) === (H_p - A_p)) {
+      return { class: "correct", text: pred.wildcard ? "ACIERTO + DIF G (+10)" : "ACIERTO + DIF G (+5)" };
+    }
     return { class: "correct", text: `✓ ACIERTO (+${earned})` };
   } else {
     return { class: "wrong", text: "✕ ERRADO (0)" };
@@ -2884,11 +3081,13 @@ async function openVSModal(cedulaB) {
   if (!userA || !userB) return;
 
   // Load predictions and specials on-demand
+  let loadedAny = false;
   if (!userA.predictionsLoaded && !userA.is_mock) {
     try {
       const loadedDataA = await loadUserData(userA.id);
       if (loadedDataA) {
         Object.assign(userA, loadedDataA);
+        loadedAny = true;
       }
     } catch (err) {
       console.error("Error loading user data A for compare modal:", err);
@@ -2903,6 +3102,7 @@ async function openVSModal(cedulaB) {
       const loadedDataB = await loadUserData(userB.id);
       if (loadedDataB) {
         Object.assign(userB, loadedDataB);
+        loadedAny = true;
       }
     } catch (err) {
       console.error("Error loading user data B for compare modal:", err);
@@ -2912,16 +3112,94 @@ async function openVSModal(cedulaB) {
     }
   }
   
+  // ponytail: ensure local calculations are fully completed for comparison
+  recalculateAllPoints();
+  
   document.getElementById('vs-name-a').innerText = userA.name;
   document.getElementById('vs-name-b').innerText = userB.name;
-  document.getElementById('vs-pts-a').innerText = `${userA.points} pts`;
-  document.getElementById('vs-pts-b').innerText = `${userB.points} pts`;
+  updatePointsWithAnimation('vs-pts-a', `${userA.points} pts`);
+  updatePointsWithAnimation('vs-pts-b', `${userB.points} pts`);
+  
+  // Render badges for User A (Tú)
+  const badgesAContainer = document.getElementById('vs-badges-a');
+  if (badgesAContainer) {
+    badgesAContainer.innerHTML = "";
+    const badgesListA = userA.badges || [];
+    let totalBadgePtsA = 0;
+    
+    const wrapper = document.createElement('div');
+    wrapper.className = 'vs-badges-container';
+    
+    badgesListA.forEach(bName => {
+      const details = getBadgeDetails(bName);
+      totalBadgePtsA += details.points;
+      const chip = document.createElement('div');
+      chip.className = 'vs-badge-chip';
+      chip.innerHTML = `<span>${details.icon}</span> ${bName} (+${details.points})`;
+      wrapper.appendChild(chip);
+    });
+    
+    if (badgesListA.length === 0) {
+      const emptyLabel = document.createElement('div');
+      emptyLabel.style.color = 'var(--text-muted)';
+      emptyLabel.style.fontSize = '11px';
+      emptyLabel.innerText = "Sin insignias (0 pts)";
+      wrapper.appendChild(emptyLabel);
+    } else {
+      const totalLabel = document.createElement('div');
+      totalLabel.style.fontSize = '10px';
+      totalLabel.style.color = 'var(--accent)';
+      totalLabel.style.fontWeight = 'bold';
+      totalLabel.style.width = '100%';
+      totalLabel.innerText = `Total Insignias: +${totalBadgePtsA} pts`;
+      wrapper.appendChild(totalLabel);
+    }
+    badgesAContainer.appendChild(wrapper);
+  }
+
+  // Render badges for User B (Rival)
+  const badgesBContainer = document.getElementById('vs-badges-b');
+  if (badgesBContainer) {
+    badgesBContainer.innerHTML = "";
+    const badgesListB = userB.badges || [];
+    let totalBadgePtsB = 0;
+    
+    const wrapper = document.createElement('div');
+    wrapper.className = 'vs-badges-container';
+    
+    badgesListB.forEach(bName => {
+      const details = getBadgeDetails(bName);
+      totalBadgePtsB += details.points;
+      const chip = document.createElement('div');
+      chip.className = 'vs-badge-chip';
+      chip.innerHTML = `<span>${details.icon}</span> ${bName} (+${details.points})`;
+      wrapper.appendChild(chip);
+    });
+    
+    if (badgesListB.length === 0) {
+      const emptyLabel = document.createElement('div');
+      emptyLabel.style.color = 'var(--text-muted)';
+      emptyLabel.style.fontSize = '11px';
+      emptyLabel.innerText = "Sin insignias (0 pts)";
+      wrapper.appendChild(emptyLabel);
+    } else {
+      const totalLabel = document.createElement('div');
+      totalLabel.style.fontSize = '10px';
+      totalLabel.style.color = 'var(--accent)';
+      totalLabel.style.fontWeight = 'bold';
+      totalLabel.style.width = '100%';
+      totalLabel.innerText = `Total Insignias: +${totalBadgePtsB} pts`;
+      wrapper.appendChild(totalLabel);
+    }
+    badgesBContainer.appendChild(wrapper);
+  }
   
   // Compare row render
   const container = document.getElementById('vs-comparisons-container');
   container.innerHTML = "";
   
-  const visibleMatches = STATE.matches.filter(m => !m.hidden);
+  const isAdminUser = STATE.currentUser && STATE.currentUser.is_admin;
+  const visibleMatches = STATE.matches.filter(m => !m.hidden && (isAdminUser || (m.match_no >= 41 && m.match_no <= 72)));
   visibleMatches.forEach((m, index) => {
     const predA = userA.predictions[m.match_no];
     const predB = userB.predictions[m.match_no];
@@ -2929,7 +3207,7 @@ async function openVSModal(cedulaB) {
     
     // Grade predictions
     const gradeA = gradePrediction(predA, m);
-    let gradeB = { class: "neutral", text: "PENDIENTE" };
+    let gradeB = { class: "neutral", text: "OCULTO" };
     
     // Formatting predictions displays
     let displayA = "S/P";
@@ -2938,19 +3216,33 @@ async function openVSModal(cedulaB) {
       if (predA.wildcard) displayA += ' <span class="vs-wildcard-star">🚨</span>';
     }
     
-    let displayB = "S/P";
-    if (predB && predB.home_score !== null && predB.away_score !== null) {
-      if (locked || userB.cedula === userA.cedula) {
+    let displayB = "🔒 OCULTO";
+    
+    if (locked) {
+      if (predB && predB.home_score !== null && predB.away_score !== null) {
         displayB = `${predB.home_score} - ${predB.away_score}`;
         if (predB.wildcard) displayB += ' <span class="vs-wildcard-star">🚨</span>';
         gradeB = gradePrediction(predB, m);
       } else {
-        displayB = "🔒 OCULTO";
-        gradeB = { class: "neutral", text: "OCULTO" };
+        displayB = "S/P";
+        gradeB = { class: "wrong", text: "✕ SIN PRED" };
       }
     } else {
-      if (locked) {
-        gradeB = { class: "wrong", text: "✕ SIN PRED" };
+      // El partido no ha comenzado (no está bloqueado)
+      if (userB.cedula === userA.cedula) {
+        // Si somos nosotros mismos (Tú), mostramos nuestra predicción o S/P
+        if (predB && predB.home_score !== null && predB.away_score !== null) {
+          displayB = `${predB.home_score} - ${predB.away_score}`;
+          if (predB.wildcard) displayB += ' <span class="vs-wildcard-star">🚨</span>';
+          gradeB = gradePrediction(predB, m);
+        } else {
+          displayB = "S/P";
+          gradeB = { class: "neutral", text: "PENDIENTE" };
+        }
+      } else {
+        // Si es el rival, ocultamos totalmente su estado
+        displayB = "🔒 OCULTO";
+        gradeB = { class: "neutral", text: "OCULTO" };
       }
     }
     
@@ -3006,6 +3298,40 @@ async function openVSModal(cedulaB) {
 
 function closeVSModal() {
   document.getElementById('vs-modal').classList.remove('active');
+}
+
+// ponytail: helper to get badge icon and point value
+function getBadgeDetails(badgeName) {
+  switch (badgeName) {
+    case "Ojo Clínico":
+      return { icon: "👁️", points: 15 };
+    case "Ganador Frecuente":
+      return { icon: "🏆", points: 10 };
+    case "Pronosticador Activo":
+      return { icon: "⚡", points: 5 };
+    case "Oráculo de Grupos":
+      return { icon: "🔮", points: 15 };
+    case "HAT-TRICK VIP":
+      return { icon: "👑", points: 20 };
+    default:
+      return { icon: "🏅", points: 0 };
+  }
+}
+
+// ponytail: score update animation visual feedback
+function updatePointsWithAnimation(elementId, newText) {
+  const el = document.getElementById(elementId);
+  if (!el) return;
+  const oldText = el.innerText;
+  if (oldText !== String(newText)) {
+    el.innerText = newText;
+    el.classList.remove('animate-pulse-points');
+    void el.offsetWidth; // force reflow
+    el.classList.add('animate-pulse-points');
+    setTimeout(() => {
+      el.classList.remove('animate-pulse-points');
+    }, 800);
+  }
 }
 
 function getCurrentTime() {
@@ -3138,10 +3464,10 @@ function renderDashboardView() {
   const badgesContainer = document.getElementById('dash-badges-container');
   const allAvailableBadges = [
     { id: "Ojo Clínico", icon: "👁️", desc: "Acertar 3 marcadores exactos" },
-    { id: "Ganador Frecuente", icon: "🏆", desc: "Acertar 15 ganadores simples (1X2)" },
-    { id: "Pronosticador Activo", icon: "⚡", desc: "Pronosticar más de 50 juegos" },
+    { id: "Ganador Frecuente", icon: "🏆", desc: "Acertar 12 ganadores simples (1X2)" },
+    { id: "Pronosticador Activo", icon: "⚡", desc: "Pronosticar más de 25 juegos" },
     { id: "Oráculo de Grupos", icon: "🔮", desc: "Acertar 6 líderes de grupo oficiales" },
-    { id: "HAT-TRICK VIP", icon: "👑", desc: "Requisitos: 3 tickets ganadores en Parley VIP de al menos 3 logros cada ticket y sin repetir partidos (TODOS DEBEN SER JUEGOS DEL MUNDIAL)" }
+    { id: "HAT-TRICK VIP", icon: "👑", desc: "Requisitos: 3 tickets en Parley VIP de al menos 3 logros cada ticket y sin repetir partidos (TODOS DEBEN SER JUEGOS DEL MUNDIAL)" }
   ];
   
   badgesContainer.innerHTML = "";
@@ -3194,10 +3520,10 @@ function renderMatchesView() {
   // Filter matches
   let filtered = STATE.matches;
   
-  // Hide hidden matches for non-admin users
+  // Hide hidden matches for non-admin users and restrict user predictions list to range 41-72
   const isAdminUser = STATE.currentUser && STATE.currentUser.is_admin;
   if (!isAdminUser) {
-    filtered = filtered.filter(m => !m.hidden);
+    filtered = filtered.filter(m => !m.hidden && m.match_no >= 41 && m.match_no <= 72);
   }
 
   if (activeMatchSubTab === 'group') {
@@ -3268,6 +3594,24 @@ function renderMatchesView() {
     }
     // ponytail: saved state intentionally omitted here — chip-row below handles it without redundancy
     
+    // Calculate user points and reason details for completed or locked matches
+    let pointsBadgeHTML = "";
+    if (m.home_score !== null && m.away_score !== null) {
+      if (predHomeVal !== "" && predAwayVal !== "") {
+        const predObj = {
+          home_score: parseInt(predHomeVal),
+          away_score: parseInt(predAwayVal),
+          wildcard: wildcardActive
+        };
+        const grade = gradePrediction(predObj, m);
+        pointsBadgeHTML = `<span class="user-points-badge ${grade.class}">${grade.text}</span>`;
+      } else {
+        pointsBadgeHTML = `<span class="user-points-badge wrong">✕ SIN PRONÓSTICO (0 PTS)</span>`;
+      }
+    } else if (locked) {
+      pointsBadgeHTML = `<span class="user-points-badge pending">⏳ PUNTUACIÓN PENDIENTE</span>`;
+    }
+
     card.innerHTML = `
       <div class="match-meta">
         <span style="font-weight:800; font-size:13px; color:var(--accent);">PARTIDO #${m.match_no} - GRUPO ${m.group}</span>
@@ -3288,14 +3632,14 @@ function renderMatchesView() {
         </div>
       </div>
       <div class="chip-row" id="chip-row-${m.match_no}">
-        ${(isEditLocked && !locked) ? `
+        ${locked ? pointsBadgeHTML : (isEditLocked) ? `
           <button class="lock-saved-chip" id="lock-btn-${m.match_no}" onclick="toggleEditLock(${m.match_no})" title="Toca para editar">
             <span class="lock-saved-icon">🔒</span>
             <span class="lock-saved-label">Guardado · <em>Editar</em></span>
           </button>
-        ` : (!locked && predHomeVal === '' && predAwayVal === '') ? `
+        ` : `
           <span class="card-lock-status pending" style="font-size:10px;">🔓 PENDIENTE</span>
-        ` : ''}
+        `}
       </div>
       <div class="match-card-footer">
         <button class="wildcard-btn ${wildcardActive ? 'active' : ''}" onclick="toggleWildcard(${m.match_no})" title="Comodín Parley (Puntos Dobles)" ${locked ? 'disabled style="cursor:not-allowed"' : ''}>
@@ -3308,6 +3652,16 @@ function renderMatchesView() {
   });
 }
 
+// ponytail: helper to look up team name by its ID/code
+function getTeamNameById(teamId) {
+  if (!teamId) return "";
+  for (const teams of Object.values(STATE.groups)) {
+    const found = teams.find(t => t.id === teamId);
+    if (found) return found.name;
+  }
+  return teamId;
+}
+
 function renderSpecialPredictionsView() {
   const container = document.getElementById('matches-scroller');
   container.innerHTML = "";
@@ -3316,6 +3670,7 @@ function renderSpecialPredictionsView() {
   card.className = "glass-card";
   
   const locked = isSpecialPredictionsLocked();
+  const { leaders } = resolveBrackets(STATE.matches);
   
   // Prepare Selectors for 12 group leaders
   let groupsHTML = "";
@@ -3331,12 +3686,49 @@ function renderSpecialPredictionsView() {
       options += `<option value="${t.id}" ${savedSelection === t.id ? 'selected' : ''}>${t.name}</option>`;
     });
     
+    // Resolve group leaders points status
+    const groupMatches = STATE.matches.filter(m => m.group === grpLetter);
+    const allFinished = groupMatches.length > 0 && groupMatches.every(m => m.home_score !== null && m.away_score !== null);
+    
+    let pointsBadgeHTML = "";
+    if (allFinished) {
+      const realLeaderCode = leaders[grpLetter];
+      const realLeaderName = getTeamNameById(realLeaderCode);
+      const userPickCode = savedSelection;
+      
+      if (userPickCode && userPickCode === realLeaderCode) {
+        pointsBadgeHTML = `
+          <div class="special-points-badge exact">
+            ⭐ ACIERTO (+5 PTS)
+            <div class="special-points-sub">Líder: ${realLeaderName}</div>
+          </div>
+        `;
+      } else if (userPickCode) {
+        pointsBadgeHTML = `
+          <div class="special-points-badge wrong">
+            ✕ ERRADO (0 PTS)
+            <div class="special-points-sub">Líder: ${realLeaderName}</div>
+          </div>
+        `;
+      } else {
+        pointsBadgeHTML = `
+          <div class="special-points-badge wrong">
+            ✕ SIN PRONÓSTICO (0 PTS)
+            <div class="special-points-sub">Líder: ${realLeaderName}</div>
+          </div>
+        `;
+      }
+    } else if (locked) {
+      pointsBadgeHTML = `<div class="special-points-badge pending">⏳ PENDIENTE (En juego)</div>`;
+    }
+    
     groupsHTML += `
       <div class="special-select-group">
         <span class="special-select-label">LÍDER GRUPO ${grpLetter}</span>
         <select class="special-select-input" onchange="saveTournamentSpecials('group', this.value, '${grpLetter}')" ${locked ? 'disabled' : ''}>
           ${options}
         </select>
+        ${pointsBadgeHTML}
       </div>
     `;
   });
@@ -3350,7 +3742,7 @@ function renderSpecialPredictionsView() {
       <br>• <strong>Recompensa:</strong> Consigue <strong>+5 PTS</strong> adicionales por cada líder de grupo que aciertes.
       <br>• <strong>Activación:</strong> Los puntos se sumarán automáticamente una vez concluido el último partido de cada respectivo grupo.
       <br><br>
-      🔒 <strong>Cierre de Predicciones:</strong> Esta sección se bloqueará por completo el <strong>22 de junio de 2026 a las 11:00 AM</strong>. ¡Asegúrate de guardar tus líderes antes del límite!
+      🔒 <strong>Cierre de Predicciones:</strong> Esta sección se bloqueará por completo el <strong>23 de junio de 2026 a las 12:00 PM</strong>. ¡Asegúrate de guardar tus líderes antes del límite!
       ${locked ? '<br><span class="lockout-badge" style="margin-top:6px;">🔒 PREDICCIONES CERRADAS</span>' : ''}
     </p>
     <div class="special-pred-card" style="margin-bottom:0">
@@ -4180,45 +4572,94 @@ async function handleForcedPasswordChange() {
 
 
 // Sincronizar usuarios con Google Sheets via Apps Script Web App
+// NOTA TÉCNICA: Usamos GET + Base64 en lugar de POST+JSON para evitar bloqueos CORS.
+// Google Apps Script NO responde a peticiones POST desde navegadores externos (error CORS).
+// La solución definitiva es codificar los datos en Base64 y enviarlos como query parameter.
 async function syncUsersToGoogleSheets() {
-  const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzn4R7wO4Vj0FxdwMc0oGDcU8xUkjA1t0P619ysf5xf2CjmRXst-k9Bo5M8WK6Ue6cqwg/exec'; // El titular debe pegar aquí la URL del Apps Script
+  const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxq_xzdaINn6XFQEgf-fgGaWBaK84CaP26z8rTB0y5dJ0jZV2yUiZsdtLOM7y4x4dKQ8g/exec';
 
   if (APPS_SCRIPT_URL.includes('REEMPLAZAR')) {
     showToast('⚠️ CONFIGURA PRIMERO LA URL DEL APPS SCRIPT EN app.js', 'error');
     return;
   }
 
-  if (!STATE.users || STATE.users.length === 0) {
-    showToast('NO HAY USUARIOS PARA SINCRONIZAR.', 'error');
+  if (!supabaseClient) {
+    showToast('ERROR DE CONEXIÓN CON EL SERVIDOR.', 'error');
     return;
   }
 
   const btn = document.getElementById('admin-sync-sheets-btn');
   if (btn) { btn.disabled = true; btn.textContent = '⏳ SINCRONIZANDO...'; }
 
-  const payload = STATE.users.map(u => ({
-    cedula: u.cedula,
-    nombre: u.name,
-    parley_username: u.parley_username || '',
-    correo: u.email || '',
-    telefono: u.phone || '',
-    fecha_nacimiento: u.dob || '',
-    puntos: u.points || 0,
-    exactos: u.exacts_count || 0,
-    aciertos_1x2: u.outcomes_count || 0,
-    insignias: u.badges ? u.badges.join('; ') : ''
-  }));
+  // Opción C: Consulta directa a profiles para obtener TODOS los campos personales,
+  // y al leaderboard para estadísticas. Esto evita depender de STATE.users que
+  // solo contiene los campos reducidos del leaderboard paginado.
+  let payload;
+  try {
+    const [profilesResult, statsResult] = await Promise.all([
+      supabaseClient.from('profiles').select('cedula, name, parley_username, email, phone, dob'),
+      supabaseClient.from('leaderboard').select('cedula, total_points, exacts_count, outcomes_count, calculated_badges')
+    ]);
+
+    if (profilesResult.error) throw new Error(profilesResult.error.message);
+    const profiles = profilesResult.data || [];
+
+    if (profiles.length === 0) {
+      showToast('NO HAY USUARIOS PARA SINCRONIZAR.', 'error');
+      if (btn) { btn.disabled = false; btn.textContent = '🔄 SINCRONIZAR CON GOOGLE SHEETS'; }
+      return;
+    }
+
+    // Mapa de estadísticas por cédula (del leaderboard)
+    const statsMap = {};
+    if (statsResult.data) {
+      statsResult.data.forEach(s => {
+        statsMap[s.cedula] = s;
+      });
+    }
+
+    payload = profiles.map(p => {
+      const stats = statsMap[p.cedula] || {};
+      return {
+        cedula: p.cedula,
+        nombre: p.name,
+        parley_username: p.parley_username || '',
+        correo: p.email || '',
+        telefono: p.phone || '',
+        fecha_nacimiento: p.dob || '',
+        puntos: stats.total_points || 0,
+        exactos: stats.exacts_count || 0,
+        aciertos_1x2: stats.outcomes_count || 0,
+        insignias: stats.calculated_badges ? stats.calculated_badges.join('; ') : ''
+      };
+    });
+  } catch (err) {
+    console.error('Error fetching profiles for sync:', err);
+    showToast('ERROR AL OBTENER DATOS DE USUARIOS PARA SINCRONIZAR.', 'error');
+    if (btn) { btn.disabled = false; btn.textContent = '🔄 SINCRONIZAR CON GOOGLE SHEETS'; }
+    return;
+  }
 
   try {
-    const response = await fetch(APPS_SCRIPT_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'sync', users: payload })
+    // Codificar el payload en Base64 para enviarlo como parámetro GET (evita CORS)
+    const jsonString = JSON.stringify({ action: 'sync', users: payload });
+    const base64Data = btoa(unescape(encodeURIComponent(jsonString)));
+    const urlWithData = `${APPS_SCRIPT_URL}?data=${encodeURIComponent(base64Data)}`;
+
+    const response = await fetch(urlWithData, {
+      method: 'GET',
+      redirect: 'follow'
     });
 
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
 
-    showToast(`✅ ${payload.length} USUARIOS SINCRONIZADOS CON GOOGLE SHEETS.`);
+    const result = await response.json();
+
+    if (result.error) {
+      throw new Error(result.error);
+    }
+
+    showToast(`✅ ${payload.length} USUARIOS SINCRONIZADOS CON GOOGLE SHEETS. (${result.updated || 0} actualizados, ${result.inserted || 0} nuevos)`);
   } catch (err) {
     console.error('Error syncing to Google Sheets:', err);
     showToast('ERROR AL SINCRONIZAR CON GOOGLE SHEETS. VERIFICA LA URL DEL APPS SCRIPT.', 'error');
@@ -4226,6 +4667,7 @@ async function syncUsersToGoogleSheets() {
     if (btn) { btn.disabled = false; btn.textContent = '🔄 SINCRONIZAR CON GOOGLE SHEETS'; }
   }
 }
+
 
 async function adminDeleteUser(cedula) {
   if (!supabaseClient) {
@@ -4559,7 +5001,7 @@ function renderSharedTicketView(user) {
   container.appendChild(listCard);
   
   const listContainer = listCard.querySelector('#shared-predictions-list');
-  const visibleMatches = STATE.matches.filter(m => !m.hidden);
+  const visibleMatches = STATE.matches.filter(m => !m.hidden && m.match_no >= 41 && m.match_no <= 72);
   
   visibleMatches.forEach(m => {
     const pred = user.predictions[m.match_no];
@@ -4831,6 +5273,11 @@ function generateUserAuditText(user) {
   STATE.matches.forEach(match => {
     const pred = user.predictions[match.match_no];
     const hasPred = pred && pred.home_score !== null && pred.away_score !== null;
+    
+    if (hasPred) {
+      predictionsCount++;
+    }
+    
     const isPlayed = match.home_score !== null && match.away_score !== null;
     
     if (!isPlayed) {
@@ -4848,7 +5295,6 @@ function generateUserAuditText(user) {
       return;
     }
     
-    predictionsCount++;
     const H_p = pred.home_score;
     const A_p = pred.away_score;
     const H_r = match.home_score;
@@ -4948,18 +5394,18 @@ function generateUserAuditText(user) {
     badgesReport += `  - OJO CLÍNICO (0 PTS) [Inactivo: ${exactsCount} exactos (Requisito: 3+)]\n`;
   }
   
-  if (winnerCount >= 15) {
-    badgesReport += `  - GANADOR FRECUENTE (+10 PTS) [Activo: ${winnerCount} aciertos (Requisito: 15+)]\n`;
+  if (winnerCount >= 12) {
+    badgesReport += `  - GANADOR FRECUENTE (+10 PTS) [Activo: ${winnerCount} aciertos (Requisito: 12+)]\n`;
     badgesPoints += 10;
   } else {
-    badgesReport += `  - GANADOR FRECUENTE (0 PTS) [Inactivo: ${winnerCount} aciertos (Requisito: 15+)]\n`;
+    badgesReport += `  - GANADOR FRECUENTE (0 PTS) [Inactivo: ${winnerCount} aciertos (Requisito: 12+)]\n`;
   }
   
-  if (predictionsCount >= 50) {
-    badgesReport += `  - PRONOSTICADOR ACTIVO (+5 PTS) [Activo: ${predictionsCount} pronósticos (Requisito: 50+)]\n`;
+  if (predictionsCount >= 25) {
+    badgesReport += `  - PRONOSTICADOR ACTIVO (+5 PTS) [Activo: ${predictionsCount} pronósticos (Requisito: 25+)]\n`;
     badgesPoints += 5;
   } else {
-    badgesReport += `  - PRONOSTICADOR ACTIVO (0 PTS) [Inactivo: ${predictionsCount} pronósticos (Requisito: 50+)]\n`;
+    badgesReport += `  - PRONOSTICADOR ACTIVO (0 PTS) [Inactivo: ${predictionsCount} pronósticos (Requisito: 25+)]\n`;
   }
   
   const leaderAciertos = groupLeadersPoints / 5;
@@ -5300,7 +5746,7 @@ function populateMatchDateFilter() {
   STATE.matches.forEach(m => {
     if (m.stage === 'group' && m.date) {
       const datePart = m.date.split(' ')[0]; // YYYY-MM-DD
-      if (isAdmin || (datePart >= '2026-06-20' && datePart <= '2026-06-27')) {
+      if (isAdmin || (datePart >= '2026-06-22' && datePart <= '2026-06-27')) {
         if (!uniqueDates.includes(datePart)) {
           uniqueDates.push(datePart);
         }
